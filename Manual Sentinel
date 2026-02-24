@@ -1,0 +1,52 @@
+Sentinel: Manual de Gestión Inteligente de Fraudes Biométricos
+Proyecto Sentinel: Gestión Inteligente de Fraudes RI-FI
+Este documento proporciona una visión integral del sistema Sentinel, detallando su propósito operativo y la arquitectura técnica que garantiza su estabilidad y rendimiento.
+I. Documentación Funcional
+1. Objetivo del Sistema
+Sentinel es una plataforma centralizada (Hub) diseñada para la gestión, seguimiento y resolución de folios relacionados con fraudes biométricos. Su propósito principal es optimizar la carga de trabajo de los especialistas, eliminando colisiones entre usuarios y proporcionando visibilidad en tiempo real de la productividad del equipo.
+2. Flujo de Trabajo (Workflow)
+El sistema opera bajo un ciclo de vida de folios bien definido:
+1. Pendiente: Folios que han ingresado al sistema vía formulario pero no han sido reclamados.
+2. En Gestión: Casos tomados por un especialista. El sistema "bloquea" el folio para evitar que otro usuario lo trabaje simultáneamente.
+3. Limbo (Stuck): Casos que llevan más de 10 minutos en gestión sin ser finalizados. Estos se marcan en la interfaz como "Rescatables" para que otro compañero pueda intervenir si es necesario.
+4. Atendido: Casos finalizados con una clasificación y notas de gestión, estampando el timestamp de cierre.
+3. Dashboard e Indicadores (KPIs)
+La interfaz presenta tres grupos de estadísticas críticas:
+• Datos Bot: Monitoreo de folios procesados automáticamente por el sistema.
+• Datos General: Visión macro de la operación (Folios totales, pendientes, tiempo promedio de atención y cumplimiento de SLA).
+• Mi Gestión: Indicadores personales del usuario logueado para fomentar el cumplimiento de metas individuales.
+4. Experiencia de Usuario e Identidad Visual
+Basado en la paleta de colores corporativa:
+• Primario (#D40099): Botones de acción y encabezados.
+• Secundario (#78256F): Títulos y etiquetas de navegación.
+• Alertas: Rojo (#e74c3c) para pendientes críticos y Anaranjado (#FD6F21) para gestiones en curso o casos en limbo.
+II. Documentación Técnica
+1. Arquitectura Modular (8 Módulos)
+El sistema utiliza una arquitectura desacoplada para facilitar el mantenimiento y escalar el rendimiento:
+Lógica del Servidor (Google Apps Script)
+• Core.gs: Orquestador principal. Maneja el control de acceso mediante el DICCIONARIO_USUARIOS y sirve la interfaz mediante doGet().
+• Servicios.gs: Gestiona las operaciones de escritura (Tomar, Liberar, Finalizar). Implementa la protección atómica.
+• Estadisticas.gs: Motor de análisis de datos. Realiza cálculos sobre una ventana acotada de 3,000 filas para optimizar la velocidad de respuesta.
+• Historial.gs: Ejecuta búsquedas profundas por CURP o Cuenta en toda la base de datos histórica.
+• Utilidades.gs: Funciones transversales de formateo de tiempo, normalización de datos y manejo de errores.
+Interfaz de Usuario (Frontend)
+• Index.html: Estructura base que inyecta los componentes mediante el motor de plantillas de Apps Script.
+• CSS.html: Hoja de estilos centralizada con variables CSS y diseño responsivo.
+• JS.html: Controlador del lado del cliente. Gestiona las llamadas asíncronas (google.script.run) y la manipulación del DOM.
+2. Control de Concurrencia y Seguridad
+Para evitar que dos especialistas "roben" el mismo folio, Sentinel implementa:
+• LockService: El servidor solicita un candado exclusivo antes de realizar cualquier escritura en la celda USR.
+• Doble Verificación: Bajo el candado del LockService, el script vuelve a leer la celda para confirmar que sigue vacía antes de estampar la inicial del usuario.
+• SpreadsheetApp.flush(): Fuerza la persistencia inmediata de los datos en Google Sheets.
+3. Optimización de Rendimiento
+Para manejar volúmenes de hasta 20,000 filas mensuales sin degradación de velocidad:
+• Ventana Dinámica: El sistema solo procesa activamente las últimas filas necesarias (configurado por defecto en 3,000).
+• getValues vs getDisplayValues: Se prioriza getValues para búsquedas en el historial por ser hasta 10
+times más veloz.
+• Solución Híbrida de Caché: (Opcional) Implementación de CacheService para guardar los KPIs del dashboard durante 10 minutos, reduciendo las llamadas a la hoja de cálculo.
+4. Variables de Control
+El sistema es configurable mediante variables constantes:
+• limboMinutos > 10: Umbral para rescate de folios.
+• resMinutos <= 30: Meta para cumplimiento de SLA.
+• SHEET_ID: Identificador único del repositorio de datos en Google Drive.
+Versión del Documento: 1.4.1

@@ -1,0 +1,28 @@
+<!-- 
+  Componente Sidebar V1.1
+  Versión Actual: 1.4.2
+  Exclusivo para la navegación del Hub Sentinel.
+-->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-header">
+    <h2 id="sidebarTitle">Hub Sentinel Fraudes</h2>
+    <button class="hamburger-btn" onclick="toggleSidebar()">☰</button>
+  </div>
+  
+  <nav class="sidebar-nav">
+    <div class="menu-item active" id="menuAtencion" onclick="navegar('atencion')">
+      <!-- Icono SVG similar a las imágenes proporcionadas -->
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px; height:20px; margin-right:15px;"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+      <span>Folios Biométricos</span>
+    </div>
+    
+    <div class="menu-item" id="menuConfig" onclick="navegar('config')" style="display:none;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px; height:20px; margin-right:15px;"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+      <span>Mesa de Control</span>
+    </div>
+  </nav>
+
+  <div class="sidebar-footer">
+    <span>Hub Sentinel Fraudes RI-FI v1.4.1</span>
+  </div>
+</aside>

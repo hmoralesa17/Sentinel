@@ -1,0 +1,289 @@
+<script>
+  /**
+   * Módulo Logica de Interfaz V1.2
+   * Controladores de eventos y lógica de toma de casos protegida.
+   */
+  let historialActual = [];
+  const COL_TABLA = ["FOLIO", "Marca temporal", "CURP", "Cuenta", "Tipo de Identificación", "Tipo Cliente", "Tipo Caso", "Servicio", "Tienda", "Dirección de correo electrónico"];
+  const MAP_LABELS = { "Marca temporal": "FECHA FOLIO", "Tipo de Identificación": "TIPO ID", "Dirección de correo electrónico": "Correo del Folio", "Repetido": "Repetido", "Comentarios Bot": "Comentarios Bot" };
+  let catalogo = [], casoParaConfirmar = null, casoActual = null, casosCargados = [];
+
+  function toggleSection(id) {
+    const el = document.getElementById(id);
+    const icon = el.querySelector('.toggle-icon');
+    el.classList.toggle('collapsed');
+    if (icon) icon.textContent = el.classList.contains('collapsed') ? '>' : '<';
+  }
+
+  function toggleAtencionInfo() {
+    const container = document.getElementById('infoGeneralContainer');
+    const btn = container.querySelector('.toggle-info-btn');
+    container.classList.toggle('collapsed');
+    btn.textContent = container.classList.contains('collapsed') ? "VER DETALLES ▼" : "OCULTAR DETALLES ▲";
+  }
+
+  function runGAS(f, s, ...a) {
+    if (typeof google !== 'undefined') {
+      google.script.run.withSuccessHandler(s).withFailureHandler(e => {
+        document.getElementById('loading').style.display = 'none';
+        showToast("Error: " + e.message, "error");
+      })[f](...a);
+    }
+  }
+
+  window.onload = function() { cargarInfoUsuario(); cargarCasos(); cargarCatalogo(); };
+
+  function cargarInfoUsuario() {
+    runGAS('obtenerInfoUsuario', info => {
+      document.getElementById('userName').textContent = info.nombreCompleto || 'Especialista';
+      document.getElementById('userIdUsr').textContent = info.vpl_usr || '---';
+      document.getElementById('userNoEmp').textContent = info.noEmpleado || 'S/N';
+    });
+  }
+
+  function actualizarStats() {
+    runGAS('obtenerEstadisticasHoy', stats => {
+      document.getElementById('stAtendidosBot').textContent = stats.atendidosBot;
+      document.getElementById('stPromBot').textContent = stats.promedioBot;
+      document.getElementById('stUltimoBot').textContent = stats.ultimoBot;
+      document.getElementById('stFoliosHoy').textContent = stats.foliosHoy;
+      document.getElementById('stAtendidosHoy').textContent = stats.atendidosHoy;
+      document.getElementById('stPendientes').textContent = stats.pendientesHoy;
+      document.getElementById('stEnGestion').textContent = stats.enGestionHoy;
+      document.getElementById('stPromHumano').textContent = stats.promedioAtencion;
+      document.getElementById('stPromTotal').textContent = stats.promedioTotal;
+      document.getElementById('stMaxTotal').textContent = stats.maxAtencion;
+      document.getElementById('stUltimo').textContent = stats.ultimoCaso;
+      document.getElementById('stViejoPendiente').textContent = stats.viejoPendiente;
+      document.getElementById('stSLA').textContent = stats.cumplimientoSLA;
+      document.getElementById('stMiAtendidosVal').textContent = stats.miAtendidos;
+      document.getElementById('stMiPromedioVal').textContent = stats.miPromedio;
+      document.getElementById('stMiMax').textContent = stats.miMax;
+      document.getElementById('stMiMin').textContent = stats.miMin;
+      document.getElementById('stMiSLA').textContent = stats.miSLA;
+      document.getElementById('stMiPrimeraAtn').textContent = stats.miPrimerAtn;
+      document.getElementById('stMiUltimaAtn').textContent = stats.miUltimaAtn;
+      const ahora = new Date();
+      document.getElementById('stLastSync').textContent = ahora.getHours() + ":" + (ahora.getMinutes() < 10 ? '0' : '') + ahora.getMinutes();
+    });
+  }
+
+  function showToast(m, t) {
+    const s = document.getElementById('toast');
+    s.textContent = m; s.className = 'toast ' + t; s.style.display = 'block';
+    setTimeout(() => s.style.display = 'none', 5000);
+  }
+
+  function switchTab(b, i) {
+    document.querySelectorAll('.tab-btn').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(x => x.classList.remove('active'));
+    b.classList.add('active'); document.getElementById(i).classList.add('active');
+  }
+
+  function cargarCasos() {
+    document.getElementById('loadingText').textContent = "Buscando casos...";
+    document.getElementById('loading').style.display = 'flex';
+    actualizarStats();
+    runGAS('obtenerCasosDinamicos', res => { casosCargados = res; renderTabla(res); document.getElementById('loading').style.display = 'none'; });
+  }
+
+  function renderTabla(c) {
+    const t = document.getElementById('tablaContenedor');
+    if (!c || c.length === 0) { 
+      t.innerHTML = '<div style="text-align:center;padding:40px;color:#999;font-size:16px;">Sin registros hoy.</div>'; 
+      return; 
+    }
+    
+    let h = '<table><thead><tr>';
+    COL_TABLA.forEach(x => {
+      let thClass = (x === 'FOLIO') ? ' class="col-folio"' : (x === 'Marca temporal') ? ' class="col-fecha"' : (x === 'CURP') ? ' class="col-curp"' : (x === 'Cuenta') ? ' class="col-cuenta"' : (x === 'Tipo de Identificación') ? ' class="col-tipo-id"' : (x === 'Tipo Cliente') ? ' class="col-tipo-cliente"' : (x === 'Tipo Caso') ? ' class="col-tipo-caso"' : (x === 'Servicio') ? ' class="col-servicio"' : (x === 'Tienda') ? ' class="col-tienda"' : (x === 'Dirección de correo electrónico') ? ' class="col-correo"' : '';
+      h += `<th${thClass}>${MAP_LABELS[x] || x}</th>`;
+    });
+    h += '<th class="col-accion">Acción</th></tr></thead><tbody>';
+    
+    c.forEach((x, index) => {
+      const trClass = x.esLimbo ? ' class="row-limbo"' : '';
+      h += `<tr${trClass}>`;
+      
+      COL_TABLA.forEach(col => {
+        let tdClass = (col === 'FOLIO') ? ' class="col-folio"' : (col === 'Marca temporal') ? ' class="col-fecha"' : (col === 'CURP') ? ' class="col-curp"' : (col === 'Cuenta') ? ' class="col-cuenta"' : (col === 'Tipo de Identificación') ? ' class="col-tipo-id"' : (col === 'Tipo Cliente') ? ' class="col-tipo-cliente"' : (col === 'Tipo Caso') ? ' class="col-tipo-caso"' : (col === 'Servicio') ? ' class="col-servicio"' : (col === 'Tienda') ? ' class="col-tienda"' : (col === 'Dirección de correo electrónico') ? ' class="col-correo"' : '';
+        let val = x.datos[col] || '-';
+        if (x.esLimbo && col === 'FOLIO') {
+          val += `<span class="badge-limbo">RES- ${x.usuarioOriginal}</span>`;
+        }
+        h += `<td${tdClass}>${val}</td>`;
+      });
+      
+      const btnLabel = x.esLimbo ? "Rescatar" : "Atender";
+      h += `<td class="col-accion"><button class="btn" style="padding: 7px 14px; font-size:13px;" onclick="previaConfirmacion(${index})">${btnLabel}</button></td></tr>`;
+    });
+    t.innerHTML = h + '</tbody></table>';
+  }
+
+  function previaConfirmacion(index) {
+    casoParaConfirmar = casosCargados[index];
+    document.getElementById('modalConfirmToma').style.display = 'flex';
+  }
+
+  function cerrarConfirmToma() { document.getElementById('modalConfirmToma').style.display = 'none'; }
+
+  /**
+   * ACTUALIZADO: Pasa la bandera de rescate al servidor para prevenir sobreescrituras
+   */
+  function ejecutarTomaDeCaso() {
+    const c = casoParaConfirmar; 
+    cerrarConfirmToma();
+    document.getElementById('loadingText').textContent = "Bloqueando folio...";
+    document.getElementById('loading').style.display = 'flex';
+
+    // Enviamos c.esLimbo como segundo parámetro (esRescate)
+    runGAS('tomarCasoDinamico', res => {
+      if (res.exito) {
+        casoActual = c; 
+        mostrarPantallaAtencion();
+        actualizarStats(); 
+        runGAS('obtenerHistorialCaso', h => {
+          renderHistorial(h);
+        }, c.datos.CURP, c.datos.Cuenta);
+      } else { 
+        document.getElementById('loading').style.display = 'none'; 
+        mostrarError(res.mensaje); // Mostrará el mensaje "⚠️ El caso ya fue tomado por..."
+        cargarCasos(); // Recarga la tabla para reflejar el estado actual
+      }
+    }, c.numeroFila, c.esLimbo); 
+  }
+
+  function renderHistorial(h) {
+    const b = document.getElementById('tablaHistorial');
+    if (!h || h.length === 0) { b.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:20px;color:#999;">Sin historial previo.</td></tr>'; return; }
+    
+    const parseDate = (str) => {
+      if (!str) return new Date(0);
+      const [dPart, hPart] = str.split(' ');
+      const [d, m, y] = dPart.split('/').map(Number);
+      const [hh, mm, ss] = hPart ? hPart.split(':').map(Number) : [0,0,0];
+      return new Date(y, m - 1, d, hh, mm, ss);
+    };
+    h.sort((a, b) => parseDate(a.fecha) - parseDate(b.fecha));
+    historialActual = h;
+
+    let r = '';
+    h.forEach((x, idx) => {
+      r += `<tr style="border-bottom:1px solid #f1f3f5;">
+              <td class="hist-fecha">${x.fecha}</td>
+              <td class="hist-folio">${x.folio}</td>
+              <td class="hist-atencion">${x.atencion}</td>
+              <td class="hist-usr">${x.usr}</td>
+              <td class="hist-clasif"><b style="color:var(--primary)">${x.clasificacion}</b></td>
+              <td class="hist-notas clickable-data" onclick="mostrarModalDetalleHist(${idx})" title="Clic para ver completo">${x.indicaciones || '-'}</td>
+            </tr>`;
+    });
+    b.innerHTML = r;
+  }
+
+  function mostrarModalDetalleHist(idx) {
+    const data = historialActual[idx];
+    document.getElementById('modalNoteTitle').textContent = 'Notas de Gestión';
+    document.getElementById('fullNoteText').textContent = data.indicaciones;
+    document.getElementById('modalNote').style.display = 'flex';
+  }
+
+  function mostrarModalDetalleBot() {
+    document.getElementById('modalNoteTitle').textContent = 'Comentarios del Bot';
+    document.getElementById('fullNoteText').textContent = casoActual.datos["Comentarios Bot"];
+    document.getElementById('modalNote').style.display = 'flex';
+  }
+
+  function cerrarModalNote() { document.getElementById('modalNote').style.display = 'none'; }
+  function mostrarError(mensaje) { document.getElementById('mensajeError').textContent = mensaje; document.getElementById('modalError').style.display = 'flex'; }
+  function cerrarError() { document.getElementById('modalError').style.display = 'none'; }
+
+  function mostrarPantallaAtencion() {
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('viewLista').classList.remove('active');
+    document.getElementById('viewAtencion').className = 'view active';
+    document.getElementById('displayFolio').textContent = casoActual.datos.FOLIO;
+    
+    const infoContainer = document.getElementById('infoGeneral');
+    infoContainer.innerHTML = '';
+    
+    const allFields = [
+      { k: "Marca temporal", label: "FECHA FOLIO", mode: "full", cls: "item-fecha", secondary: false },
+      { k: "CURP", label: "CURP", mode: "full", cls: "item-curp", secondary: false },
+      { k: "Cuenta", label: "CUENTA", mode: "full", cls: "item-cuenta", secondary: false },
+      { k: "Tipo de Identificación", label: "TIPO ID", mode: "truncate", cls: "item-tipo-id", secondary: false },
+      { k: "Tipo Cliente", label: "TIPO CLIENTE", mode: "truncate", cls: "item-tipo-cliente", secondary: false },
+      { k: "Tienda", label: "TIENDA", mode: "truncate", cls: "item-tienda", secondary: false },
+      { k: "Dirección de correo electrónico", label: "CORREO", mode: "full", cls: "item-correo", secondary: true },
+      { k: "Repetido", label: "¿Subido Antes?", mode: "check", cls: "item-check", secondary: true },
+      { k: "Tipo Caso", label: "TIPO CASO", mode: "wrap", cls: "item-tipo-caso", secondary: true },
+      { k: "Servicio", label: "SERVICIO", mode: "wrap", cls: "item-servicio", secondary: true },
+      { k: "Comentarios Bot", label: "COMENTARIOS BOT", mode: "truncate", cls: "item-comentarios", secondary: true }
+    ];
+
+    let rowHtml = '<div class="data-row">';
+    allFields.forEach(cfg => {
+      let label = cfg.label;
+      let val = (casoActual.datos[cfg.k] || '').trim() || '-';
+      if (cfg.mode === "check") {
+        val = (val && val !== "-" && val !== "0" && val !== "NO") ? "SI" : "NO";
+      }
+      let cssClass = 'data-item ' + (cfg.cls || '');
+      if (cfg.secondary) cssClass += ' secondary-info';
+      if (cfg.mode === 'wrap' || cfg.mode === 'full' || cfg.mode === 'check') cssClass += ' no-truncate';
+      let onclickAttr = '';
+      if (cfg.k === "Comentarios Bot") {
+        cssClass += ' clickable-data';
+        onclickAttr = `onclick="mostrarModalDetalleBot()"`;
+      }
+      const titleAttr = (cfg.mode === 'truncate') ? `title="${val.replace(/"/g, '&quot;')}"` : '';
+      rowHtml += `<div class="${cssClass}" ${titleAttr} ${onclickAttr}><span class="data-label">${label}</span> ${val}</div>`;
+    });
+    rowHtml += '</div>';
+    infoContainer.innerHTML = rowHtml;
+    document.getElementById('selectClasificacion').value = ""; document.getElementById('textIndicaciones').value = "";
+    switchTab(document.getElementById('btnTabHistorico'), 'tabHistorico');
+  }
+
+  function cargarCatalogo() {
+    runGAS('obtenerCatalogoNotas', r => {
+      const s = document.getElementById('selectClasificacion');
+      r.forEach(x => { const o = document.createElement('option'); o.value = x.clasificacion; o.textContent = x.clasificacion; s.appendChild(o); });
+      catalogo = r;
+    });
+  }
+
+  function cambioClasificacion() {
+    const v = document.getElementById('selectClasificacion').value;
+    const x = catalogo.find(i => i.clasificacion === v);
+    document.getElementById('textIndicaciones').value = x ? x.indicacion : "";
+  }
+
+  function cancelarAtencion() {
+    document.getElementById('loadingText').textContent = "Desbloqueando folio...";
+    document.getElementById('loading').style.display = 'flex';
+    runGAS('liberarCasoDinamico', () => {
+      casoActual = null;
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('viewAtencion').classList.remove('active');
+      document.getElementById('viewLista').classList.add('active'); cargarCasos();
+    }, casoActual.numeroFila);
+  }
+
+  function abrirConfirmacionFinal() {
+    if (!document.getElementById('selectClasificacion').value || !document.getElementById('textIndicaciones').value.trim()) { showToast("Selecciona clasificación y nota.", "error"); return; }
+    document.getElementById('modalConfirmFinal').style.display = 'flex';
+  }
+
+  function cerrarConfirmFinal() { document.getElementById('modalConfirmFinal').style.display = 'none'; }
+
+  function enviarFinalizacion() {
+    cerrarConfirmFinal(); document.getElementById('loading').style.display = 'flex';
+    document.getElementById('loadingText').textContent = "Guardando atención oficial...";
+    runGAS('finalizarCasoDinamico', r => {
+      casoActual = null;
+      document.getElementById('loading').style.display = 'none';
+      if (r.exito) { showToast("¡Gestión finalizada!", "success"); document.getElementById('viewAtencion').classList.remove('active'); document.getElementById('viewLista').classList.add('active'); cargarCasos(); }
+    }, casoActual.numeroFila, document.getElementById('selectClasificacion').value, document.getElementById('textIndicaciones').value);
+  }
+</script>

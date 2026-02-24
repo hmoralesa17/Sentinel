@@ -1,0 +1,305 @@
+Paleta de Colores del Proyecto
+A continuación se detalla la guía de estilos cromáticos utilizada en la interfaz para mantener la consistencia visual y jerarquía de información.
+1. Colores de Identidad (Brand Colors)
+• #D40099 (Rosa Fuerte): Color primario. Utilizado para encabezados de tabla, botones principales y bordes de resaltado general.
+• #78256F (Morado Fuerte): Color secundario. Utilizado para textos de títulos, etiquetas de grupos en el dashboard y estados activos de pestañas.
+• #6B007B (Morado): Tonalidad profunda para acentos y estados de hover.
+2. Tonos de Apoyo y Suavizado
+• #BF97BA (Morado Claro): Utilizado para bordes secundarios o iconos descriptivos.
+• #E4D3E2 (Morado más claro): Color de fondo para tarjetas de modal o elementos de contención suaves.
+• #E68FC9 (Rosa Claro): Acentos suaves en elementos interactivos.
+• #E95DBD (Rosa vibrante): Resaltado de valores numéricos clave.
+• #FDEDF7 (Fondo Pastel): Fondo general de la página de acceso restringido para dar calidez.
+3. Colores de Estado (UI Indicators)
+• #FD6F21 (Anaranjado): Estado de advertencia o "En Gestión". Indica que un elemento requiere atención pero está siendo procesado.
+• #e74c3c (Rojo): Estado de peligro o "Pendientes". Utilizado para captar la atención inmediata sobre tareas no iniciadas.
+• #2ecc71 (Verde): Estado de éxito o sincronización. Indica que los datos están al día.
+• #3498db (Azul): Estado informativo o estadísticas de sistemas automáticos (Bot).
+4. Fondos y Bases
+• #f4f6f9: Fondo general de la aplicación.
+• #ffffff: Fondo de contenedores, tarjetas y tablas para máxima legibilidad.
+Chat
+📜
+Proyecto Sentinel
+7 fuentes
+Este recurso detalla las capacidades de Google Apps Script, una plataforma basada en la nube que emplea JavaScript para personalizar y automatizar las herramientas de Google Workspace. Los desarrolladores pueden crear funciones personalizadas en hojas de cálculo, diseñar complementos para el mercado digital y programar tareas que se ejecutan automáticamente. El texto destaca la integración de inteligencia artificial generativa, permitiendo que los usuarios conecten sus aplicaciones con modelos avanzados de Vertex AI y Gemini. Además, el sitio ofrece una amplia gama de muestras de código, guías técnicas y canales de soporte para facilitar el aprendizaje. Mediante estas herramientas, es posible transformar servicios como Gmail, Drive y Chat en soluciones empresariales mucho más potentes y conectadas.
+
+¿Cómo puedo automatizar tareas entre diferentes aplicaciones de Google Workspace?
+¿De qué manera se puede integrar la inteligencia artificial en Apps Script?
+Enséñame cómo crear funciones personalizadas y complementos para principiantes.
+Hoy • 2:50 p.m.
+Quiero obtener más información sobre estas fuentes con la guía de aprendizaje
+
+¡Hola! Claro que sí, será un gusto ayudarte a entender este código.
+A grandes rasgos, este fragmento pertenece al módulo de configuración y control de acceso de una aplicación web llamada "Sentinel Fraudes RI-FI v12". Está escrito en Google Apps Script y su función principal es verificar qué usuarios tienen permiso para ver la herramienta antes de cargar la interfaz.
+Para poder explicarte mejor, necesito saber un poco sobre tu punto de partida:
+¿Qué tanta experiencia tienes con programación o Google Apps Script?
+• A) Soy principiante (necesito una explicación sencilla y sin tecnicismos).
+• B) Tengo conocimientos intermedios (entiendo conceptos básicos de variables y funciones).
+• C) Soy experto (quiero un análisis técnico de la lógica).
+Una vez que me digas esto, te propongo que revisemos el código en este orden:
+1. Configuración: Cómo se conecta a las hojas de cálculo y define a los usuarios.
+2. Seguridad: Cómo funciona el sistema que permite o bloquea el acceso (doGet y verificarAcceso).
+¿Por dónde te gustaría empezar?
+Explícame como principiante cómo se controlan los accesos al sistema
+¿Qué función cumplen los IDs de las hojas de cálculo?
+¿Cómo vincula el código los correos electrónicos con las iniciales?
+Para la función doGet que está en el archivo de Core.gs quiero ver como dejarle log por si llega a fallar., ¿es función puede fallar?
+
+Sí, la función doGet puede fallar. Aunque parece sencilla, hay dos puntos críticos donde suele romperse:
+1. Archivo no encontrado: Si HtmlService.createTemplateFromFile('Index') no encuentra el archivo "Index.html" (por ejemplo, si alguien le cambió el nombre por error).
+2. Error en la plantilla: El método .evaluate() ejecuta el código que está dentro de tu HTML (los <? ... ?>). Si en tu HTML llamas a una variable que no existe, doGet fallará inmediatamente.
+Aquí tienes cómo protegerla usando un bloque try...catch para registrar el error y avisar al usuario:
+function doGet() {
+  try {
+    // Intentamos ejecutar la lógica normal
+    var emailUsuario = Session.getActiveUser().getEmail();
+
+    if (verificarAcceso(emailUsuario)) {
+      var template = HtmlService.createTemplateFromFile('Index');
+      return template.evaluate()
+        .setTitle('Sentinel Fraudes RI-FI v12')
+        .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
+        .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+    } else {
+      return crearPantallaBloqueo(emailUsuario);
+    }
+
+  } catch (e) {
+    // SI FALLA:
+    
+    // 1. Registramos el error en la consola de Apps Script (Ver -> Ejecuciones)
+    console.error("Error Crítico en doGet: " + e.toString());
+    
+    // 2. Le mostramos un mensaje amigable al usuario en lugar de un error genérico
+    return HtmlService.createHtmlOutput(
+      "<h3>Ocurrió un error al cargar Sentinel.</h3>" +
+      "<p>Detalle: " + e.toString() + "</p>" +
+      "<p>Por favor, reporta esto al administrador (hmoralesa).</p>"
+    );
+  }
+}
+¿Por qué esto ayuda? Si doGet falla sin este bloque, el usuario verá una página genérica de Google que dice "Error del servidor", lo cual no te da información. Con este cambio, verás el error exacto en la pestaña de Ejecuciones del editor de script.
+¿Te gustaría que revisemos qué partes de tu HTML (Index) podrían causar ese fallo en el .evaluate()?
+¿Cómo puedo revisar los errores registrados en la consola de Apps Script?
+¿Qué errores comunes suelen ocurrir al evaluar la plantilla Index.html?
+¿Cómo puedo personalizar el mensaje de error para usuarios no autorizados?
+Crea una función de error con el mismo diseño que la función crearPantallaBloqueo para el mensaje amigable
+
+Aquí tienes la función crearPantallaError. He replicado la lógica de extracción del nombre y el estilo visual de tu función crearPantallaBloqueo, pero adaptando el mensaje para errores técnicos y utilizando el color rojo de tu paleta de estados para el título.
+1. Nueva Función: crearPantallaError
+Copia este código al final de tu archivo Core.gs o en Utilidades.gs:
+/**
+ * Genera una pantalla de error con la identidad visual de Sentinel.
+ * Basado en el diseño de crearPantallaBloqueo [1] y paleta de colores [3].
+ */
+function crearPantallaError(error, email) {
+  var nombreUser = email ? email.split('@').toUpperCase() : "USUARIO";
+  
+  // Estilos en línea para asegurar que se vean incluso si falla la carga de CSS externo
+  var html = `
+    <div style="font-family: 'Segoe UI', sans-serif; text-align: center; padding: 40px; color: #78256F;">
+      <h1 style="color: #e74c3c; margin-bottom: 10px;">⚠️ Error de Carga</h1>
+      
+      <h3 style="color: #D40099;">Hola ${nombreUser},</h3>
+      
+      <p style="font-size: 16px;">
+        Sentinel encontró un problema inesperado y no puede iniciar.
+      </p>
+
+      <div style="background-color: #f4f6f9; border-left: 5px solid #e74c3c; padding: 15px; margin: 20px auto; max-width: 600px; text-align: left; color: #333; font-family: monospace;">
+        <strong>Detalle Técnico:</strong><br>
+        ${error.toString()}
+      </div>
+
+      <p>Por favor, envía una captura de esta pantalla a <strong>hmoralesa</strong>.</p>
+      
+      <hr style="border: 0; border-top: 1px solid #E4D3E2; margin: 30px 0;">
+      <small style="color: #BF97BA;">Cuenta detectada: ${email}</small>
+    </div>
+  `;
+
+  return HtmlService.createHtmlOutput(html)
+    .setTitle("Error - Sentinel Fraudes")
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
+2. Cómo integrarla en tu doGet
+Ahora, actualiza tu función doGet en Core.gs para usar esta nueva pantalla:
+function doGet() {
+  var emailUsuario = Session.getActiveUser().getEmail();
+
+  try {
+    if (verificarAcceso(emailUsuario)) {
+      var template = HtmlService.createTemplateFromFile('Index');
+      return template.evaluate()
+        .setTitle('Sentinel Fraudes RI-FI v12')
+        .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
+        .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+    } else {
+      return crearPantallaBloqueo(emailUsuario); // Tu función original [1]
+    }
+  } catch (e) {
+    console.error("Fallo Crítico doGet: " + e.toString());
+    // Aquí llamamos a la nueva función visual
+    return crearPantallaError(e, emailUsuario);
+  }
+}
+¿Quieres que probemos generar un error intencional para ver cómo luce la pantalla nueva?
+¿Cómo puedo personalizar los colores de error usando la Guía de Identidad?
+¿Qué otros errores comunes en evaluate() debería capturar con el log?
+¿Cómo puedo probar que la pantalla de error funciona sin romper el código?
+Claro, ¿como lo puedo probar
+
+¡Excelente iniciativa! La mejor forma de estar seguros de que el sistema de seguridad funciona es romperlo a propósito de forma controlada.
+Para ver la pantalla roja de error sin dañar tu código real, vamos a insertar una línea que fuerce un fallo "falso" justo al inicio.
+Pasos para la prueba:
+1. Ve a tu archivo Core.gs.
+2. Busca tu función doGet.
+3. Agrega la línea throw new Error(...) justo después del try, así:
+function doGet() {
+  var emailUsuario = Session.getActiveUser().getEmail();
+
+  try {
+    // --- LÍNEA DE PRUEBA (Borrar al terminar) ---
+    throw new Error("Simulación de fallo crítico para probar la interfaz."); 
+    // ---------------------------------------------
+
+    if (verificarAcceso(emailUsuario)) {
+      var template = HtmlService.createTemplateFromFile('Index');
+      // ... resto del código ...
+¿Cómo ver el resultado?
+No necesitas publicar una nueva versión.
+1. Guarda el archivo.
+2. Arriba a la derecha, haz clic en Implementar (Deploy) > Probar implementaciones (Test deployments).
+3. Haz clic en la URL que termina en /dev.
+Deberías ver:
+• El encabezado rojo "⚠️ Error de Carga".
+• Tu saludo personalizado "Hola [TU_USUARIO]".
+• El cuadro gris con el texto: "Error: Simulación de fallo crítico...".
+¡Avísame si te apareció la pantalla roja correctamente! No olvides borrar esa línea cuando termines para que la app vuelva a funcionar.
+¿Cómo puedo personalizar los colores de esta nueva pantalla?
+¿Qué errores comunes suelen capturarse en el bloque catch?
+¿Cómo guardo un registro histórico de los fallos detectados?
+Ahora revisemos la función
+/**
+
+
+
+Función verificación de acceso a la plataforma
+*/
+function verificarAcceso(email) {
+return USUARIOS_AUTORIZADOS.indexOf(email.toLowerCase()) > -1;
+}
+
+
+¿puede fallar?
+
+Assessing Potential Vulnerabilities...
+Ahora revisemos la función
+/**
+
+
+Función verificación de acceso a la plataforma
+*/
+function verificarAcceso(email) {
+return USUARIOS_AUTORIZADOS.indexOf(email.toLowerCase()) > -1;
+}
+
+
+¿puede fallar?
+
+Sí, esta función puede fallar, aunque es menos probable que doGet.
+El punto débil es email.toLowerCase(). Si por alguna razón la variable email llega vacía (null o undefined), JavaScript intentará ejecutar una función de texto sobre algo que no es texto y arrojará un error: TypeError: Cannot read property 'toLowerCase' of null.
+Esto puede pasar si:
+1. Pruebas manuales: Ejecutas la función desde el editor sin pasarle un correo.
+2. Permisos: En raras ocasiones, Session.getActiveUser().getEmail() devuelve una cadena vacía si los permisos de seguridad de Google no se han otorgado correctamente.
+Cómo blindarla
+Podemos agregar una pequeña defensa para asegurarnos de que email sea texto válido antes de intentar procesarlo.
+Sustituye tu función en Core.gs por esta versión más segura:
+function verificarAcceso(email) {
+  // 1. Defensa: Si no hay email o no es texto, denegamos acceso sin romper el código
+  if (!email || typeof email !== 'string') {
+    console.warn("Intento de acceso con email inválido: " + email);
+    return false;
+  }
+  
+  // 2. Ejecución normal
+  return USUARIOS_AUTORIZADOS.indexOf(email.toLowerCase()) > -1;
+}
+Con esto, si el email llega corrupto, la función simplemente dirá "No tiene acceso" (return false) en lugar de detener todo el programa con un error rojo.
+Ahora que tenemos el acceso asegurado, ¿te gustaría revisar el archivo Index.html para ver cómo se estructura la página visualmente?
+¿Cómo se conectan los colores de marca en CSS.html?
+¿Qué otros errores comunes ocurren al procesar folios?
+¿Cómo funciona el sistema de bloqueo para evitar duplicados?
+Ahora, vamos con esta función
+
+
+/**
+
+
+
+Función auxiliar para incluir archivos HTML (CSS y JS) en la plantilla principal.
+*/
+function include(filename) {
+return HtmlService.createHtmlOutputFromFile(filename).getContent();
+}
+
+
+¿puede fallar?
+
+Sí, esta función puede fallar y es una
+Ahora, vamos con esta función
+
+
+/**
+
+
+Función auxiliar para incluir archivos HTML (CSS y JS) en la plantilla principal.
+*/
+function include(filename) {
+return HtmlService.createHtmlOutputFromFile(filename).getContent();
+}
+
+
+¿puede fallar?
+
+Sí, esta función puede fallar y es una causa muy común de errores "silenciosos" (la página simplemente se queda en blanco o muestra "Error del servidor").
+El fallo ocurre en HtmlService.createHtmlOutputFromFile(filename) si:
+1. El archivo no existe: Si en tu Index.html escribes <?!= include('JSS') ?> (por error de dedo) y el archivo real se llama JS.
+2. Mayúsculas/Minúsculas: Google Apps Script es sensible a esto. css no es igual a CSS.
+El Riesgo
+Si include falla, toda la función doGet falla porque include se ejecuta dentro del proceso de construcción de la página (.evaluate()). El usuario ni siquiera verá tu nueva pantalla de error, verá un error genérico de Google.
+Cómo blindarla
+Podemos hacer que, si falta un archivo (por ejemplo, un estilo), la página cargue igual (aunque se vea "fea") en lugar de romperse totalmente.
+Sustituye la función en Core.gs por esta versión segura:
+function include(filename) {
+  try {
+    return HtmlService.createHtmlOutputFromFile(filename).getContent();
+  } catch (e) {
+    // Si falla, registramos el error en la consola interna
+    console.warn("⚠️ Archivo no encontrado: " + filename);
+    // Devolvemos un comentario HTML inofensivo para que la página siga cargando
+    return "<script>console.error('Fallo al cargar componente: " + filename + "');</script>";
+  }
+}
+Con esto, si borras CSS.html por error, la página funcionará (sin colores), pero el sistema no colapsará.
+
+--------------------------------------------------------------------------------
+Ya hemos asegurado la parte de Configuración (doGet, verificarAcceso, include).
+¿Te parece bien si pasamos a revisar la seguridad de las Operaciones de Base de Datos (funciones tomarCasoDinamico y finalizarCasoDinamico)? Ahí es donde ocurren los errores de "folios duplicados" o datos cruzados.
+¿Cómo evita LockService que dos gestores tomen el mismo folio?
+¿Qué sucede técnicamente cuando un caso entra en estado Limbo?
+¿Cómo optimiza Estadisticas.gs el rendimiento con 20,000 filas mensuales?
+Comienza a escribir…
+7 fuentes
+Studio
+Resumen en audio
+Presentación con diapositivas
+Resumen en video
+Mapa mental
+Informes
+Tarjetas didácticas
+Cuestionario
+Infografía
+Tabla de datos

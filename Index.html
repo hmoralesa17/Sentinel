@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <!-- Módulo de Estilos: Trae todo el CSS desde CSS.html -->
+  <?!= include('CSS'); ?>
+</head>
+<body>
+
+<div class="container">
+  <!-- DASHBOARD CABECERA (FIJO) -->
+  <div class="dashboard-header">
+    <div class="stats-section" id="secBot">
+      <div class="group-label" onclick="toggleSection('secBot')">DATOS BOT <span class="toggle-icon">&lt;</span></div>
+      <div class="stats-group">
+        <div class="stat-chip bot-stat non-essential"><span class="stat-label">Atención</span><span class="stat-val" id="stAtendidosBot">0</span></div>
+        <div class="stat-chip bot-stat non-essential"><span class="stat-label">Tiempo</span><span class="stat-val" id="stPromBot">0:00</span></div>
+        <div class="stat-chip bot-stat"><span class="stat-label">Último</span><span class="stat-val" id="stUltimoBot">--:--</span></div>
+      </div>
+    </div>
+    
+    <div class="stats-section" id="secGeneral">
+      <div class="group-label" onclick="toggleSection('secGeneral')">DATOS GENERAL <span class="toggle-icon">&lt;</span></div>
+      <div class="stats-group">
+        <div class="stat-chip highlight non-essential"><span class="stat-label">FOLIOS</span><span class="stat-val" id="stFoliosHoy">0</span></div>
+        <div class="stat-chip highlight non-essential"><span class="stat-label">Atención</span><span class="stat-val" id="stAtendidosHoy">0</span></div>
+        <div class="stat-chip danger-stat"><span class="stat-label">Pendientes</span><span class="stat-val" id="stPendientes">0</span></div>
+        <div class="stat-chip warn-stat"><span class="stat-label">Gestión</span><span class="stat-val" id="stEnGestion">0</span></div>
+        <div class="stat-chip highlight non-essential" style="width: 80px;"><span class="stat-label">EQU | TOT</span><span class="stat-val"><span id="stPromHumano">0:00</span>|<span id="stPromTotal">0:00</span></span></div>
+        <div class="stat-chip highlight non-essential"><span class="stat-label">Max</span><span class="stat-val" id="stMaxTotal">0:00</span></div>
+        <div class="stat-chip highlight"><span class="stat-label">Último</span><span class="stat-val" id="stUltimo">--:--</span></div>
+        <div class="stat-chip highlight"><span class="stat-label">+ Viejo</span><span class="stat-val" id="stViejoPendiente">--:--</span></div>
+        <div class="stat-chip highlight non-essential"><span class="stat-label">% SLA</span><span class="stat-val" id="stSLA">0%</span></div>
+      </div>
+    </div>
+
+    <div class="stats-section" id="secMiGestion">
+      <div class="group-label" onclick="toggleSection('secMiGestion')">MI GESTIÓN <span class="toggle-icon">&lt;</span></div>
+      <div class="stats-group">
+        <div class="stat-chip user-stat"><span class="stat-label">Atención</span><span class="stat-val" id="stMiAtendidosVal">0</span></div>
+        <div class="stat-chip user-stat"><span class="stat-label">Tiempo</span><span class="stat-val" id="stMiPromedioVal">0:00</span></div>
+        <div class="stat-chip user-stat non-essential"><span class="stat-label">Max</span><span class="stat-val" id="stMiMax">0:00</span></div>
+        <div class="stat-chip user-stat non-essential"><span class="stat-label">Min</span><span class="stat-val" id="stMiMin">0:00</span></div>
+        <div class="stat-chip user-stat non-essential"><span class="stat-label">% SLA</span><span class="stat-val" id="stMiSLA">0%</span></div>
+        <div class="stat-chip user-stat non-essential"><span class="stat-label">Primer</span><span class="stat-val" id="stMiPrimeraAtn">--:--</span></div>
+        <div class="stat-chip user-stat non-essential"><span class="stat-label">Último</span><span class="stat-val" id="stMiUltimaAtn">--:--</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="userProfile" class="user-profile">
+    <span class="name" id="userName">Cargando...</span>
+    <span class="id-usr" id="userIdUsr">---</span>
+    <span class="no-emp" id="userNoEmp">S/N</span>
+  </div>
+
+  <!-- VISTA 1: LISTADO -->
+  <div id="viewLista" class="view active">
+    <div class="view-header">
+      <div class="header-left-spacer"></div>
+      <h1>Gestor de Folios Biométricos</h1>
+      <div class="header-action">
+        <div class="stat-chip warn-stat" style="width: 130px; max-width: 130px;"><span class="stat-label">DEBES REALIZAR UNA</span><span class="stat-val">RECARGA CONSTANTE</span></div>
+        <div class="stat-chip sync-stat" style="width: 55px; max-width: 55px;"><span class="stat-label">ÚLT Carga</span><span class="stat-val" id="stLastSync">--:--</span></div>
+        <button class="btn btn-update" onclick="cargarCasos()">🔄 Actualizar Datos</button>
+      </div>
+    </div>
+    <div class="table-wrapper" id="tablaContenedor"></div>
+  </div>
+
+  <!-- VISTA 2: ATENCIÓN -->
+  <div id="viewAtencion" class="view">
+    <div class="view-header">
+      <div class="header-left-spacer"></div>
+      <h1>Atención Folio: <span id="displayFolio"></span></h1>
+      <div class="header-action">
+        <button class="btn btn-secondary" onclick="cancelarAtencion()">⬅️ Volver y Liberar Trámite</button>
+      </div>
+    </div>
+
+    <div class="atencion-header-data" id="infoGeneralContainer">
+       <div style="font-size: 10px; font-weight: 800; color: var(--secondary); display: flex; align-items: center; margin-bottom: 5px;">
+          DETALLES FOLIO <button class="toggle-info-btn" onclick="toggleAtencionInfo()">OCULTAR DETALLES ▲</button>
+       </div>
+       <div id="infoGeneral"></div>
+    </div>
+
+    <div class="atencion-body-layout">
+      <div class="tabs-container">
+        <div class="tabs-header">
+          <button id="btnTabHistorico" class="tab-btn active" onclick="switchTab(this, 'tabHistorico')">📁 Histórico Folios</button>
+          <button id="btnTabHuella" class="tab-btn" onclick="switchTab(this, 'tabHuella')">👤 Registro Huella</button>
+        </div>
+        <div id="tabHistorico" class="tab-content active">
+          <h3 style="margin-top:0; color:var(--secondary); font-size: 18px;">📜 Antecedentes del Cliente en el Formulario</h3>
+          <div style="overflow-x: auto;">
+            <table style="width:100%; font-size:13px; border-collapse: collapse; min-width: 800px;">
+              <thead>
+                <tr style="text-align:left; background:#f8f9fa; border-bottom:1px solid #dee2e6;">
+                  <th class="hist-fecha">Fecha Folio</th>
+                  <th class="hist-folio">Folio</th>
+                  <th class="hist-atencion">Atención</th>
+                  <th class="hist-usr">USR</th>
+                  <th class="hist-clasif">Clasificación</th>
+                  <th class="hist-notas">Notas</th>
+                </tr>
+              </thead>
+              <tbody id="tablaHistorial"></tbody>
+            </table>
+          </div>
+        </div>
+        <div id="tabHuella" class="tab-content"><h3>en proceso de construcción</h3></div>
+      </div>
+      <div class="form-column">
+        <label>1. Seleccionar Clasificación *</label>
+        <select id="selectClasificacion" onchange="cambioClasificacion()"><option value="">-- Elige una opción --</option></select>
+        <label style="margin-top:10px;">2. Indicaciones Finales *</label>
+        <textarea id="textIndicaciones"></textarea>
+        <button class="btn" style="width: 100%; padding: 15px; margin-top:5px;" onclick="abrirConfirmacionFinal()">✅ Finalizar Atención</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODALES -->
+<div id="modalNote" class="modal-overlay" onclick="cerrarModalNote()">
+  <div class="modal-note-content" onclick="event.stopPropagation()">
+    <h3 id="modalNoteTitle">Detalle</h3>
+    <div id="fullNoteText"></div>
+    <div style="margin-top:20px; text-align: right;"><button class="btn" onclick="cerrarModalNote()">Cerrar</button></div>
+  </div>
+</div>
+
+<div id="modalConfirmToma" class="modal-overlay"><div class="modal-card"><h3>¿Atender este caso?</h3><div style="display:flex; gap:12px; margin-top:20px;"><button class="btn btn-secondary" style="flex:1" onclick="cerrarConfirmToma()">No</button><button class="btn" style="flex:1" onclick="ejecutarTomaDeCaso()">Si, comenzar</button></div></div></div>
+<div id="modalError" class="modal-overlay"><div class="modal-card"><h3 style="color:var(--danger)">⚠️ No es posible atender</h3><p id="mensajeError" style="margin: 20px 0; font-size: 15px; color: #555;"></p><div style="margin-top:20px;"><button class="btn" style="width:100%" onclick="cerrarError()">Entendido</button></div></div></div>
+<div id="modalConfirmFinal" class="modal-overlay"><div class="modal-card"><h3>Confirmar Registro</h3><p>¿Estás seguro de finalizar la gestión?</p><div style="display:flex; gap:12px; margin-top:20px;"><button class="btn btn-secondary" style="flex:1" onclick="cerrarConfirmFinal()">Revisar</button><button class="btn" style="flex:1" onclick="enviarFinalizacion()">Guardar Todo</button></div></div></div>
+<div id="loading" class="loading-overlay"><div class="spinner"></div><div id="loadingText" style="font-weight:700; color:var(--secondary); font-size: 16px;">Sincronizando...</div></div>
+<div id="toast" class="toast"></div>
+
+<!-- Módulo de Lógica: Trae todo el JavaScript desde JS.html -->
+<?!= include('JS'); ?>
+
+</body>
+</html>

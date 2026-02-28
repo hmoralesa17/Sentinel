@@ -1,6 +1,6 @@
 /**
  * Módulo de Análisis V1.2
- * Lectura acotada (3000 filas) con detección de rezago (ayer y anteriores).
+ * Lectura acotada (1500 filas) con detección de rezago (ayer y anteriores).
  */
 
 function obtenerEstadisticasHoy() {

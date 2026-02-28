@@ -22,6 +22,14 @@
     btn.textContent = container.classList.contains('collapsed') ? "VER DETALLES ▼" : "OCULTAR DETALLES ▲";
   }
 
+  // Lógica para abrir/cerrar la Barra Lateral Flotante
+  function toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    if(sidebar) {
+      sidebar.classList.toggle('active');
+    }
+  }
+
   function runGAS(f, s, ...a) {
     if (typeof google !== 'undefined') {
       google.script.run.withSuccessHandler(s).withFailureHandler(e => {
@@ -31,7 +39,14 @@
     }
   }
 
-  window.onload = function() { cargarInfoUsuario(); cargarCasos(); cargarCatalogo(); };
+  window.onload = function() { cargarInfoUsuario(); cargarCasos(); cargarCatalogo(); cargarVersion(); };
+
+  function cargarVersion() {
+    runGAS('obtenerVersionFormateada', v => {
+      const el = document.getElementById('txtVersionApp');
+      if (el) el.textContent = "Sentinel Fraudes RI-FI " + v;
+    });
+  }
 
   function cargarInfoUsuario() {
     runGAS('obtenerInfoUsuario', info => {

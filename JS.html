@@ -278,12 +278,22 @@
   function cerrarConfirmFinal() { document.getElementById('modalConfirmFinal').style.display = 'none'; }
 
   function enviarFinalizacion() {
-    cerrarConfirmFinal(); document.getElementById('loading').style.display = 'flex';
+    cerrarConfirmFinal(); 
+    document.getElementById('loading').style.display = 'flex';
     document.getElementById('loadingText').textContent = "Guardando atención oficial...";
+    
     runGAS('finalizarCasoDinamico', r => {
-      casoActual = null;
       document.getElementById('loading').style.display = 'none';
-      if (r.exito) { showToast("¡Gestión finalizada!", "success"); document.getElementById('viewAtencion').classList.remove('active'); document.getElementById('viewLista').classList.add('active'); cargarCasos(); }
+      
+      if (r.exito) { 
+        casoActual = null;
+        showToast("¡Gestión finalizada!", "success"); 
+        document.getElementById('viewAtencion').classList.remove('active'); 
+        document.getElementById('viewLista').classList.add('active'); 
+        cargarCasos(); 
+      } else {
+        mostrarError(r.mensaje);
+      }
     }, casoActual.numeroFila, document.getElementById('selectClasificacion').value, document.getElementById('textIndicaciones').value);
   }
 </script>

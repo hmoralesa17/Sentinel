@@ -1,17 +1,20 @@
 <!-- 
   Componente Sidebar V1.1
-  Versión Actual: 1.4.2
   Exclusivo para la navegación del Hub Sentinel.
 -->
 <aside class="sidebar" id="sidebar">
   <div class="sidebar-header">
-    <h2 id="sidebarTitle">Hub Sentinel Fraudes</h2>
-    <button class="hamburger-btn" onclick="toggleSidebar()">☰</button>
+    <button class="hamburger-btn" title="Alternar menú" onclick="toggleSidebar()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:20px; height:20px;">
+        <polyline points="15 18 9 12 15 6"></polyline>
+      </svg>
+    </button>
+    
+    <h2 id="sidebarTitle">HUB Fraudes</h2>
   </div>
   
   <nav class="sidebar-nav">
     <div class="menu-item active" id="menuAtencion" onclick="navegar('atencion')">
-      <!-- Icono SVG similar a las imágenes proporcionadas -->
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:20px; height:20px; margin-right:15px;"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
       <span>Folios Biométricos</span>
     </div>
@@ -23,6 +26,6 @@
   </nav>
 
   <div class="sidebar-footer">
-    <span>Hub Sentinel Fraudes RI-FI v1.4.1</span>
+    <span id="txtVersionApp">Cargando versión...</span>
   </div>
 </aside>

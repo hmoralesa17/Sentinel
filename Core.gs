@@ -40,7 +40,7 @@ function doGet() {
     if (verificarAcceso(emailUsuario)) {
       var template = HtmlService.createTemplateFromFile('Index');
       return template.evaluate()
-        .setTitle('Sentinel Fraudes RI-FI v12')
+        .setTitle('Sentinel Fraudes RI-FI v1.14')
         .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
         .addMetaTag('viewport', 'width=device-width, initial-scale=1');
     } else {

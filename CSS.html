@@ -316,4 +316,135 @@
     display: block;
     margin-top: 2px;
   }
+  /* =========================================
+     MÓDULO SIDEBAR (BARRA COLAPSABLE - RAIL)
+     ========================================= */
+  
+  /* 1. Ajuste del contenedor principal (Deja espacio para la barra colapsada) */
+  .container { 
+    padding-left: 90px !important; 
+  }
+
+  /* 2. Barra Lateral (Siempre visible, ancho dinámico) */
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0; /* Siempre pegada a la pared izquierda */
+    width: 70px; /* ANCHO COLAPSADO (Solo íconos) */
+    height: 100vh;
+    background-color: #111827; 
+    color: white;
+    z-index: 3500;
+    display: flex;
+    flex-direction: column;
+    transition: width 0.3s ease-in-out;
+    box-shadow: 5px 0 15px rgba(0,0,0,0.3);
+    overflow-x: hidden; /* Oculta los textos cuando se hace pequeña */
+  }
+
+  /* Estado Expandido */
+  .sidebar.active {
+    width: 250px; /* ANCHO EXPANDIDO */
+  }
+
+  /* 3. Cabecera (Fija a 250px para que no se apachurre) */
+  .sidebar-header {
+    display: flex;
+    align-items: center;
+    width: 250px; 
+    padding: 20px 20px;
+    border-bottom: 1px solid #1f2937;
+    box-sizing: border-box;
+  }
+
+  /* Botón de Flecha: Gira automáticamente */
+  .hamburger-btn {
+    background: none;
+    border: none;
+    color: #9ca3af;
+    cursor: pointer;
+    min-width: 30px; /* Asegura que no se haga pequeño */
+    display: flex;
+    justify-content: center;
+    padding: 0;
+  }
+  .hamburger-btn:hover { color: white; }
+  .hamburger-btn svg {
+    transition: transform 0.3s;
+    transform: rotate(180deg); /* Por defecto apunta a la derecha (>) */
+  }
+  .sidebar.active .hamburger-btn svg {
+    transform: rotate(0deg); /* Al abrir apunta a la izquierda (<) */
+  }
+
+  /* Título de la cabecera */
+  .sidebar-header h2 {
+    color: var(--primary);
+    font-size: 14px;
+    font-weight: 800;
+    margin: 0 0 0 15px; /* Separación del botón */
+    white-space: nowrap;
+    opacity: 0; /* Oculto por defecto */
+    transition: opacity 0.2s;
+  }
+  .sidebar.active .sidebar-header h2 {
+    opacity: 1; /* Visible al abrir */
+  }
+
+  /* 4. Opciones del Menú */
+  .sidebar-nav {
+    flex: 1;
+    padding: 20px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  .menu-item {
+    display: flex;
+    align-items: center;
+    width: 250px; /* Ancho fijo para proteger el texto */
+    padding: 12px 23px; /* Centra los íconos perfectos en los 70px */
+    color: #9ca3af;
+    cursor: pointer;
+    transition: 0.2s;
+    font-size: 14px;
+    font-weight: 600;
+    box-sizing: border-box;
+  }
+  .menu-item:hover {
+    color: white;
+    background: rgba(255,255,255,0.05);
+  }
+  .menu-item.active {
+    background-color: var(--primary);
+    color: white;
+    border-left: 4px solid #fff;
+  }
+  .menu-item svg {
+    min-width: 22px;
+    margin-right: 20px;
+  }
+  .menu-item span {
+    white-space: nowrap;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+  .sidebar.active .menu-item span {
+    opacity: 1;
+  }
+
+  /* 5. Footer (Versión) */
+  .sidebar-footer {
+    width: 250px;
+    padding: 15px 20px;
+    font-size: 11px;
+    color: #6b7280;
+    border-top: 1px solid #1f2937;
+    white-space: nowrap;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+  .sidebar.active .sidebar-footer {
+    opacity: 1;
+  }
 </style>

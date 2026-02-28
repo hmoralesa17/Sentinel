@@ -4,6 +4,7 @@ Session.getActiveUser().getEmail();
  * Archivo Principal de Configuración y Control de Acceso
  */
 
+var VERSION_APP = 15;
 var SHEET_ID = '1h9zkrvgmH0r-K1wokCVgo3c_aGEKbqBMH03VHL6flDo';
 var SHEET_NAME = 'Respuestas de formulario 2';
 var CATALOG_SHEET_NAME = 'Notas Bot'; 
@@ -40,7 +41,7 @@ function doGet() {
     if (verificarAcceso(emailUsuario)) {
       var template = HtmlService.createTemplateFromFile('Index');
       return template.evaluate()
-        .setTitle('Sentinel Fraudes RI-FI v1.14')
+        .setTitle('Gestor Sentinel Fraudes RI-FI')
         .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
         .addMetaTag('viewport', 'width=device-width, initial-scale=1');
     } else {
@@ -79,4 +80,15 @@ function include(filename) {
     // Devolvemos un comentario HTML inofensivo para que la página siga cargando
     return "<script>console.error('Fallo al cargar componente: " + filename + "');</script>";
   }
+}
+
+/**
+ * Convierte un número entero en formato semántico. 
+ * Ej: 14 -> "014" -> "v0.1.4" | 100 -> "100" -> "v1.0.0"
+ */
+function obtenerVersionFormateada() {
+  // padStart asegura que al menos tenga 3 dígitos (agrega ceros a la izquierda)
+  var numStr = VERSION_APP.toString().padStart(3, '0');
+  // split y join separan cada número y le meten un punto en medio
+  return "v" + numStr.split('').join('.');
 }

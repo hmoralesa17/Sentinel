@@ -1,9 +1,10 @@
 <script>
-  /**
+/**
    * Módulo Logica de Interfaz V1.2
    * Controladores de eventos y lógica de toma de casos protegida.
    */
   let historialActual = [];
+  let versionGlobalApp = "15";
   const COL_TABLA = ["FOLIO", "Marca temporal", "CURP", "Cuenta", "Tipo de Identificación", "Tipo Cliente", "Tipo Caso", "Servicio", "Tienda", "Dirección de correo electrónico"];
   const MAP_LABELS = { "Marca temporal": "FECHA FOLIO", "Tipo de Identificación": "TIPO ID", "Dirección de correo electrónico": "Correo del Folio", "Repetido": "Repetido", "Comentarios Bot": "Comentarios Bot" };
   let catalogo = [], casoParaConfirmar = null, casoActual = null, casosCargados = [];
@@ -39,12 +40,22 @@
     }
   }
 
-  window.onload = function() { cargarInfoUsuario(); cargarCasos(); cargarCatalogo(); cargarVersion(); };
+  // Al arrancar, solo cargamos datos estáticos y ligeros (1 sola vez)
+  window.onload = function() { 
+    cargarInfoUsuario(); 
+    cargarCatalogo(); 
+    cargarVersion(); 
+    validarPermisos(); 
+    cargarCatalogosExplorador();
+  };
 
   function cargarVersion() {
     runGAS('obtenerVersionFormateada', v => {
       const el = document.getElementById('txtVersionApp');
-      if (el) el.textContent = "Sentinel Fraudes RI-FI " + v;
+      if (el) {
+        // Separa el texto para que el CSS pueda ocultar la primera parte
+        el.innerHTML = `<span class="texto-version-largo">Sentinel Gestor Fraudes RI-FI </span>${v}`;
+      }
     });
   }
 
@@ -53,6 +64,23 @@
       document.getElementById('userName').textContent = info.nombreCompleto || 'Especialista';
       document.getElementById('userIdUsr').textContent = info.vpl_usr || '---';
       document.getElementById('userNoEmp').textContent = info.noEmpleado || 'S/N';
+    });
+  }
+
+  // ==========================================
+  // VALIDACIÓN DE PERMISOS (ADMIN)
+  // ==========================================
+  function validarPermisos() {
+    runGAS('verificarSiEsAdmin', isAdmin => {
+      if (isAdmin) {
+        // Enciende el botón del menú lateral
+        const btnMenu = document.getElementById('menuConfig');
+        if (btnMenu) btnMenu.style.display = 'flex';
+        
+        // Enciende la tarjeta gigante del Home
+        const cardHome = document.getElementById('cardConfigHome');
+        if (cardHome) cardHome.style.display = 'block';
+      }
     });
   }
 
@@ -162,34 +190,60 @@
         }, c.datos.CURP, c.datos.Cuenta);
       } else { 
         document.getElementById('loading').style.display = 'none'; 
-        mostrarError(res.mensaje); // Mostrará el mensaje "⚠️ El caso ya fue tomado por..."
-        cargarCasos(); // Recarga la tabla para reflejar el estado actual
+        mostrarError(res.mensaje); 
+        cargarCasos(); 
       }
     }, c.numeroFila, c.esLimbo); 
   }
 
   function renderHistorial(h) {
     const b = document.getElementById('tablaHistorial');
-    if (!h || h.length === 0) { b.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:20px;color:#999;">Sin historial previo.</td></tr>'; return; }
+    if (!b) return;
+
+    if (!h || h.length === 0) { 
+        b.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:20px;color:#999;">Sin historial previo para este cliente.</td></tr>'; 
+        return; 
+    }
     
     const parseDate = (str) => {
       if (!str) return new Date(0);
       const [dPart, hPart] = str.split(' ');
-      const [d, m, y] = dPart.split('/').map(Number);
-      const [hh, mm, ss] = hPart ? hPart.split(':').map(Number) : [0,0,0];
+      if (!dPart) return new Date(0);
+      const parts = dPart.split('/');
+      if (parts.length < 3) return new Date(0);
+      
+      const d = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10);
+      const y = parseInt(parts[2], 10);
+      
+      let hh = 0, mm = 0, ss = 0;
+      if (hPart) {
+          const hParts = hPart.split(':');
+          hh = parseInt(hParts[0], 10) || 0;
+          mm = parseInt(hParts[1], 10) || 0;
+          ss = parseInt(hParts[2], 10) || 0;
+      }
       return new Date(y, m - 1, d, hh, mm, ss);
     };
-    h.sort((a, b) => parseDate(a.fecha) - parseDate(b.fecha));
+    
+    h.sort((a, b) => {
+        const d1 = parseDate(a.fecha);
+        const d2 = parseDate(b.fecha);
+        return d1 - d2;
+    });
+    
     historialActual = h;
 
     let r = '';
     h.forEach((x, idx) => {
       r += `<tr style="border-bottom:1px solid #f1f3f5;">
-              <td class="hist-fecha">${x.fecha}</td>
-              <td class="hist-folio">${x.folio}</td>
-              <td class="hist-atencion">${x.atencion}</td>
-              <td class="hist-usr">${x.usr}</td>
-              <td class="hist-clasif"><b style="color:var(--primary)">${x.clasificacion}</b></td>
+              <td class="hist-fecha">${x.fecha || '-'}</td>
+              <td class="hist-folio">${x.folio || '-'}</td>
+              <td class="hist-curp">${x.curp || '-'}</td>
+              <td class="hist-cuenta">${x.cuenta || '-'}</td>
+              <td class="hist-atencion">${x.atencion || '-'}</td>
+              <td class="hist-usr">${x.usr || '-'}</td>
+              <td class="hist-clasif"><b style="color:var(--primary)">${x.clasificacion || '-'}</b></td>
               <td class="hist-notas clickable-data" onclick="mostrarModalDetalleHist(${idx})" title="Clic para ver completo">${x.indicaciones || '-'}</td>
             </tr>`;
     });
@@ -214,13 +268,26 @@
   function cerrarError() { document.getElementById('modalError').style.display = 'none'; }
 
   function mostrarPantallaAtencion() {
-    document.getElementById('loading').style.display = 'none';
-    document.getElementById('viewLista').classList.remove('active');
-    document.getElementById('viewAtencion').className = 'view active';
-    document.getElementById('displayFolio').textContent = casoActual.datos.FOLIO;
+    const loading = document.getElementById('loading');
+    const viewL = document.getElementById('viewLista');
+    const viewA = document.getElementById('viewAtencion');
+    const tituloGlobal = document.getElementById('mainTitle'); 
+    
+    if(loading) loading.style.display = 'none';
+    if(viewL) viewL.classList.remove('active');
+    if(viewA) viewA.className = 'view active';
+    
+    if(tituloGlobal && casoActual) {
+      tituloGlobal.innerHTML = 'Atención Folio: <span style="color: var(--primary);">' + (casoActual.datos.FOLIO || 'S/N') + '</span>';
+    }
     
     const infoContainer = document.getElementById('infoGeneral');
+    if(!infoContainer) return;
+    
     infoContainer.innerHTML = '';
+
+    const tablaHist = document.getElementById('tablaHistorial');
+    if(tablaHist) tablaHist.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:30px; color:#999; font-style:italic;">⏳ Buscando antecedentes del cliente...</td></tr>';
     
     const allFields = [
       { k: "Marca temporal", label: "FECHA FOLIO", mode: "full", cls: "item-fecha", secondary: false },
@@ -237,27 +304,46 @@
     ];
 
     let rowHtml = '<div class="data-row">';
+    
     allFields.forEach(cfg => {
-      let label = cfg.label;
-      let val = (casoActual.datos[cfg.k] || '').trim() || '-';
-      if (cfg.mode === "check") {
-        val = (val && val !== "-" && val !== "0" && val !== "NO") ? "SI" : "NO";
+      try {
+        let label = cfg.label;
+        let valBruto = (casoActual && casoActual.datos) ? casoActual.datos[cfg.k] : '';
+        let val = valBruto ? String(valBruto).trim() : '';
+        if (!val) val = '-';
+        
+        if (cfg.mode === "check") {
+          val = (val !== "-" && val !== "0" && String(val).toUpperCase() !== "NO") ? "SI" : "NO";
+        }
+        
+        let cssClass = 'data-item ' + (cfg.cls || '');
+        if (cfg.secondary) cssClass += ' secondary-info';
+        if (cfg.mode === 'wrap' || cfg.mode === 'full' || cfg.mode === 'check') cssClass += ' no-truncate';
+        
+        let onclickAttr = '';
+        if (cfg.k === "Comentarios Bot") {
+          cssClass += ' clickable-data';
+          onclickAttr = `onclick="mostrarModalDetalleBot()"`;
+        }
+        
+        const titleAttr = (cfg.mode === 'truncate') ? `title="${String(val).replace(/"/g, '&quot;')}"` : '';
+        rowHtml += `<div class="${cssClass}" ${titleAttr} ${onclickAttr}><span class="data-label">${label}</span> ${val}</div>`;
+        
+      } catch(e) {
+        console.error("Error al pintar el campo: " + cfg.label, e);
       }
-      let cssClass = 'data-item ' + (cfg.cls || '');
-      if (cfg.secondary) cssClass += ' secondary-info';
-      if (cfg.mode === 'wrap' || cfg.mode === 'full' || cfg.mode === 'check') cssClass += ' no-truncate';
-      let onclickAttr = '';
-      if (cfg.k === "Comentarios Bot") {
-        cssClass += ' clickable-data';
-        onclickAttr = `onclick="mostrarModalDetalleBot()"`;
-      }
-      const titleAttr = (cfg.mode === 'truncate') ? `title="${val.replace(/"/g, '&quot;')}"` : '';
-      rowHtml += `<div class="${cssClass}" ${titleAttr} ${onclickAttr}><span class="data-label">${label}</span> ${val}</div>`;
     });
     rowHtml += '</div>';
+    
     infoContainer.innerHTML = rowHtml;
-    document.getElementById('selectClasificacion').value = ""; document.getElementById('textIndicaciones').value = "";
-    switchTab(document.getElementById('btnTabHistorico'), 'tabHistorico');
+    
+    const selC = document.getElementById('selectClasificacion');
+    const txtI = document.getElementById('textIndicaciones');
+    if(selC) selC.value = ""; 
+    if(txtI) txtI.value = "";
+    
+    const btnHist = document.getElementById('btnTabHistorico');
+    if(btnHist) switchTab(btnHist, 'tabHistorico');
   }
 
   function cargarCatalogo() {
@@ -275,13 +361,26 @@
   }
 
   function cancelarAtencion() {
-    document.getElementById('loadingText').textContent = "Desbloqueando folio...";
-    document.getElementById('loading').style.display = 'flex';
+    const loadingText = document.getElementById('loadingText');
+    const loading = document.getElementById('loading');
+    const viewA = document.getElementById('viewAtencion');
+    const viewL = document.getElementById('viewLista');
+    const tituloGlobal = document.getElementById('mainTitle');
+    
+    if(!casoActual) return;
+
+    if(loadingText) loadingText.textContent = "Desbloqueando folio...";
+    if(loading) loading.style.display = 'flex';
+    
     runGAS('liberarCasoDinamico', () => {
-      casoActual = null;
-      document.getElementById('loading').style.display = 'none';
-      document.getElementById('viewAtencion').classList.remove('active');
-      document.getElementById('viewLista').classList.add('active'); cargarCasos();
+        casoActual = null;
+        if(loading) loading.style.display = 'none';
+        if(viewA) viewA.classList.remove('active');
+        if(viewL) viewL.classList.add('active'); 
+        
+        if(tituloGlobal) tituloGlobal.innerHTML = 'Atención Folios Biométricos <span id="displayFolio" style="display:none;"></span>';
+        
+        cargarCasos();
     }, casoActual.numeroFila);
   }
 
@@ -294,21 +393,348 @@
 
   function enviarFinalizacion() {
     cerrarConfirmFinal(); 
-    document.getElementById('loading').style.display = 'flex';
-    document.getElementById('loadingText').textContent = "Guardando atención oficial...";
+    
+    const loading = document.getElementById('loading');
+    const loadingText = document.getElementById('loadingText');
+    const s = document.getElementById('selectClasificacion');
+    const t = document.getElementById('textIndicaciones');
+    const tituloGlobal = document.getElementById('mainTitle');
+    
+    if (!casoActual || !s || !t) return;
+
+    if(loading) loading.style.display = 'flex';
+    if(loadingText) loadingText.textContent = "Guardando atención oficial...";
     
     runGAS('finalizarCasoDinamico', r => {
-      document.getElementById('loading').style.display = 'none';
+      if(loading) loading.style.display = 'none';
       
-      if (r.exito) { 
+      if (r && r.exito) { 
         casoActual = null;
         showToast("¡Gestión finalizada!", "success"); 
-        document.getElementById('viewAtencion').classList.remove('active'); 
-        document.getElementById('viewLista').classList.add('active'); 
+        
+        const vA = document.getElementById('viewAtencion');
+        const vL = document.getElementById('viewLista');
+        if(vA) vA.classList.remove('active'); 
+        if(vL) vL.classList.add('active'); 
+        
+        if(tituloGlobal) tituloGlobal.innerHTML = 'Atención Folios Biométricos <span id="displayFolio" style="display:none;"></span>';
+        
         cargarCasos(); 
       } else {
-        mostrarError(r.mensaje);
+        mostrarError(r ? r.mensaje : "Error desconocido");
       }
-    }, casoActual.numeroFila, document.getElementById('selectClasificacion').value, document.getElementById('textIndicaciones').value);
+    }, casoActual.numeroFila, s.value, t.value);
   }
+
+// ==========================================
+// CONTROLADOR CENTRAL DE NAVEGACIÓN
+// ==========================================
+function navegar(pantalla) {
+    if (casoActual !== null) {
+      showToast("⚠️ Tienes un folio en atención. Finalízalo o pulsa 'Cancelar Atención' antes de salir.", "error");
+      return; 
+    }
+  
+    const sidebar = document.getElementById('sidebar');
+    if (sidebar && sidebar.classList.contains('active')) {
+      sidebar.classList.remove('active');
+    }
+
+    document.querySelectorAll('.menu-item').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
+    
+    const tituloGlobal = document.getElementById('mainTitle');
+    
+    if (pantalla === 'home') {
+      const menuHome = document.getElementById('menuHome');
+      if (menuHome) menuHome.classList.add('active');
+      document.getElementById('viewHome').classList.add('active');
+      if(tituloGlobal) tituloGlobal.innerText = 'Bienvenido - Hub Sentinel Fraudes RI-FI'; 
+    } 
+    else if (pantalla === 'atencion') {
+      document.getElementById('menuAtencion').classList.add('active'); 
+      document.getElementById('viewLista').classList.add('active'); 
+      if(tituloGlobal) tituloGlobal.innerText = 'Atención Folios Biométricos'; 
+      cargarCasos(); 
+    } 
+    else if (pantalla === 'explorador') {
+      document.getElementById('menuExplorador').classList.add('active'); 
+      document.getElementById('viewExplorador').classList.add('active'); 
+      if(tituloGlobal) tituloGlobal.innerHTML = 'Buscador de Folios <span id="displayFolio" style="display:none;"></span>'; 
+    }
+    else if (pantalla === 'config') {
+      document.getElementById('menuConfig').classList.add('active'); 
+      document.getElementById('viewConfig').classList.add('active'); 
+      if(tituloGlobal) tituloGlobal.innerText = 'Mesa de Control - Configuración'; 
+    }
+  }
+
+  // ==========================================
+  // LÓGICA DE INTERFAZ: EXPLORADOR DE FOLIOS
+  // ==========================================
+  function toggleFiltrosExplorador() {
+    const container = document.getElementById('filterContainer');
+    const btn = document.getElementById('btnToggleFiltros');
+    if (!container || !btn) return;
+    container.classList.toggle('collapsed');
+    btn.textContent = container.classList.contains('collapsed') ? "MOSTRAR ▼" : "OCULTAR ▲";
+  }
+
+  function limpiarFiltrosExplorador() {
+    const inputs = document.querySelectorAll('#filterContainer .filter-input');
+    inputs.forEach(input => input.value = "");
+  }
+
+  // ==========================================
+  // MOTOR DEL EXPLORADOR (ENVIAR Y RECIBIR DATOS)
+  // ==========================================
+  function buscarEnExplorador() {
+    const fInicio = document.getElementById('filtroFechaInicio').value;
+    const fFin = document.getElementById('filtroFechaFin').value;
+    const rCond = document.getElementById('filtroResCondicion').value;
+    const rMin = document.getElementById('filtroResMinutos').value;
+    const folio = document.getElementById('filtroFolio').value.trim();
+    const curp = document.getElementById('filtroCurp').value.trim();
+    const cuenta = document.getElementById('filtroCuenta').value.trim();
+    const tienda = document.getElementById('filtroTienda').value.trim();
+    const correo = document.getElementById('filtroCorreo').value.trim();
+    const usr = document.getElementById('filtroUsr').value.trim();
+    const tId = document.getElementById('filtroTipoId').value;
+    const tCaso = document.getElementById('filtroTipoCaso').value;
+    const clasif = document.getElementById('filtroClasificacion').value;
+
+    if (!fInicio && !fFin && !folio && !curp && !cuenta && !tienda && !correo && !usr && !tId && !tCaso && !clasif && !rCond) {
+      showToast("⚠️ Por favor ingresa al menos un criterio de búsqueda.", "error");
+      return;
+    }
+
+    const filtros = {
+      fechaInicio: fInicio, fechaFin: fFin, resCondicion: rCond, resMinutos: rMin,
+      folio: folio, curp: curp, cuenta: cuenta, tienda: tienda, correo: correo,
+      usr: usr, tipoId: tId, tipoCaso: tCaso, clasificacion: clasif
+    };
+
+    const container = document.getElementById('filterContainer');
+    const btn = document.getElementById('btnToggleFiltros');
+    if (container && btn) {
+      container.classList.add('collapsed');
+      btn.textContent = "MOSTRAR ▼";
+    }
+
+    const contenedor = document.getElementById('tablaExploradorContenedor');
+    contenedor.innerHTML = '<div style="text-align:center; padding:60px 20px; color:#999;"><span style="font-size:30px; display:block; margin-bottom:10px;">⏳</span>Buscando en la base de datos...</div>';
+
+    runGAS('buscarFoliosExplorador', function(res) {
+      if (res && res.exito) {
+        if (res.data.length === 0) {
+          contenedor.innerHTML = '<div style="text-align:center; padding:60px 20px; color:#999;">No se encontraron folios que coincidan con tus filtros.</div>';
+        } else {
+          renderTablaExplorador(res.data);
+        }
+      } else {
+        contenedor.innerHTML = `<div style="text-align:center; padding:60px 20px; color:red;">Error del servidor: ${res ? res.mensaje : "Desconocido"}</div>`;
+      }
+    }, filtros);
+  }
+
+  // ==========================================
+  // MEGA-TABLA PAGINADA DEL EXPLORADOR
+  // ==========================================
+  
+  let datosExploradorMemoria = [];
+  let paginaActualExplorador = 1;
+  const REGISTROS_POR_PAGINA = 100;
+
+  function renderTablaExplorador(datos) {
+    datosExploradorMemoria = datos;
+    paginaActualExplorador = 1;
+    dibujarPaginaExplorador();
+  }
+
+  function dibujarPaginaExplorador() {
+    const contenedor = document.getElementById('tablaExploradorContenedor');
+    if (!datosExploradorMemoria || datosExploradorMemoria.length === 0) return;
+
+    const totalPaginas = Math.ceil(datosExploradorMemoria.length / REGISTROS_POR_PAGINA);
+    const inicio = (paginaActualExplorador - 1) * REGISTROS_POR_PAGINA;
+    const fin = Math.min(inicio + REGISTROS_POR_PAGINA, datosExploradorMemoria.length);
+    const paginaDatos = datosExploradorMemoria.slice(inicio, fin);
+
+    let html = `
+      <div style="overflow-x: auto; max-height: calc(100vh - 210px); border-bottom: 1px solid #dee2e6;">
+        <table style="width: 100%; border-collapse: collapse; min-width: 2600px; font-size: 11.5px; text-align: center; white-space: nowrap;">
+          <thead style="position: sticky; top: 0; background: var(--secondary); color: #fff; z-index: 2;">
+            <tr>
+              <th style="padding: 10px; position: sticky; left: 0; top: 0; background: var(--secondary); z-index: 10; min-width: 130px; text-align: left;">Folio</th>
+              <th style="padding: 10px; position: sticky; left: 130px; top: 0; background: var(--secondary); z-index: 10; min-width: 160px;">CURP</th>
+              <th style="padding: 10px; position: sticky; left: 290px; top: 0; background: var(--secondary); z-index: 10; min-width: 160px; box-shadow: 2px 0 5px rgba(0,0,0,0.1);">Cuenta</th>
+              <th style="padding: 10px;">Fecha Folio</th>
+              <th style="padding: 10px;">Tipo Cliente</th>
+              <th style="padding: 10px;">Tipo Identificación</th>
+              <th style="padding: 10px; text-align: left;">Tipo Caso</th>
+              <th style="padding: 10px; text-align: left;">Servicio</th>
+              <th style="padding: 10px;">Tienda</th>
+              <th style="padding: 10px; text-align: left;">Correo Usuario</th>
+              <th style="padding: 10px;">Repetido</th>
+              <th style="padding: 10px;">Especialista</th>
+              <th style="padding: 10px;">Inicio Atención</th>
+              <th style="padding: 10px;">Fin Atención</th>
+              <th style="padding: 10px;">SLA (HH:MM:SS)</th>
+              <th style="padding: 10px; text-align: left;">Notas Bot</th>
+              <th style="padding: 10px; text-align: left;">Clasificación</th>
+              <th style="padding: 10px; text-align: left;">Indicaciones</th>
+            </tr>
+          </thead>
+          <tbody>
+    `;
+
+    paginaDatos.forEach((row, idx) => {
+      const txtRepetido = (row.repetido && String(row.repetido).trim() !== '' && String(row.repetido).trim() !== '-') ? 'Sí' : 'No';
+
+      // ✨ MAGIA SLA: Convertir los decimales de Google Sheets al formato exacto HH:MM:SS
+      let slaFinalMins = parseFloat(row.resolucion) || 0;
+      let hSla = Math.floor(slaFinalMins / 60);
+      let mSla = Math.floor(slaFinalMins % 60);
+      let sSla = Math.round((slaFinalMins * 60) % 60);
+      
+      // Ajuste por si los segundos redondean a 60
+      if (sSla === 60) { sSla = 0; mSla++; }
+      if (mSla === 60) { mSla = 0; hSla++; }
+
+      let slaFormateado = String(hSla).padStart(2, '0') + ':' + 
+                          String(mSla).padStart(2, '0') + ':' + 
+                          String(sSla).padStart(2, '0');
+
+      // Indice real dentro del array global para pasarlo a los modales sin romper el código
+      let idxGlobal = inicio + idx;
+
+      html += `
+        <tr style="border-bottom: 1px solid #eee; background: #fff;">
+          <td style="padding: 10px; position: sticky; left: 0; background: #fff; z-index: 1; border-right: 1px solid #ddd; font-weight: 700; color: var(--primary); cursor:pointer; min-width: 130px; text-align: left;" onclick="abrirModalExplorador('Folio', ${idxGlobal})">${row.folio}</td>
+          <td style="padding: 10px; position: sticky; left: 130px; background: #fff; z-index: 1; border-right: 1px solid #ddd; min-width: 160px;">${row.curp}</td>
+          <td style="padding: 10px; position: sticky; left: 290px; background: #fff; z-index: 1; border-right: 2px solid #ddd; min-width: 160px;">${row.cuenta}</td>
+          
+          <td style="padding: 10px;">${row.marca}</td>
+          <td style="padding: 10px;">${row.tipoCli}</td>
+          <td style="padding: 10px;">${row.tipoId}</td>
+          <td style="padding: 10px; text-align: left;">${row.tipoCaso}</td>
+          <td style="padding: 10px; text-align: left;">${row.servicio}</td>
+          <td style="padding: 10px;">${row.tienda}</td>
+          <td style="padding: 10px; text-align: left;">${row.correo}</td>
+          <td style="padding: 10px; font-weight: bold; color: ${txtRepetido === 'Sí' ? '#d93025' : 'inherit'};">${txtRepetido}</td>
+          <td style="padding: 10px;">${row.usr}</td>
+          <td style="padding: 10px;">${row.inicioAtn}</td>
+          <td style="padding: 10px;">${row.atencion}</td>
+          
+          <td style="padding: 10px; font-weight: bold; color: ${slaFinalMins > 30 ? 'red' : 'inherit'};">${slaFormateado}</td>
+          
+          <td class="clickable-data" style="padding: 10px; text-align: left; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" onclick="mostrarDetalleExplorador('Notas Bot', ${idxGlobal})" title="Clic para ver completo">${row.comentarios || '-'}</td>
+          <td style="padding: 10px; font-weight: bold; text-align: left;">${row.clasificacion}</td>
+          <td class="clickable-data" style="padding: 10px; text-align: left; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" onclick="mostrarDetalleExplorador('Indicaciones', ${idxGlobal})" title="Clic para ver completo">${row.indicaciones || '-'}</td>
+        </tr>
+      `;
+    });
+
+    html += `</tbody></table></div>`;
+
+    html += `
+      <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; background: #f8f9fa;">
+        <div style="font-size: 13px; color: #555;">
+          Mostrando <b>${inicio + 1}</b> al <b>${fin}</b> de <b style="color: var(--primary); font-size: 14px;">${datosExploradorMemoria.length}</b> folios encontrados.
+        </div>
+        <div style="display: flex; gap: 15px; align-items: center;">
+          <button class="btn btn-secondary" style="padding: 6px 15px; margin: 0; ${paginaActualExplorador === 1 ? 'opacity: 0.5; cursor: not-allowed;' : ''}" onclick="cambiarPaginaExplorador(-1)" ${paginaActualExplorador === 1 ? 'disabled' : ''}>⬅️ Anterior</button>
+          <span style="font-weight: 700; color: var(--secondary); font-size: 13px;">Página ${paginaActualExplorador} de ${totalPaginas}</span>
+          <button class="btn btn-secondary" style="padding: 6px 15px; margin: 0; ${paginaActualExplorador === totalPaginas ? 'opacity: 0.5; cursor: not-allowed;' : ''}" onclick="cambiarPaginaExplorador(1)" ${paginaActualExplorador === totalPaginas ? 'disabled' : ''}>Siguiente ➡️</button>
+        </div>
+      </div>
+    `;
+
+    contenedor.innerHTML = html;
+  }
+
+  function cambiarPaginaExplorador(direccion) {
+    paginaActualExplorador += direccion;
+    dibujarPaginaExplorador();
+  }
+
+  // ==========================================
+  // CARGAR CATÁLOGOS DEL EXPLORADOR
+  // ==========================================
+  function cargarCatalogosExplorador() {
+    runGAS('obtenerCatalogosExplorador', function(res) {
+      if (res && res.exito) {
+        llenarSelectDinamico('filtroTipoId', res.tipoId);
+        llenarSelectDinamico('filtroTipoCaso', res.tipoCaso);
+        llenarSelectDinamico('filtroClasificacion', res.clasificacion);
+      } else {
+        console.error("Error al cargar catálogos del explorador:", res ? res.mensaje : "Desconocido");
+      }
+    });
+  }
+
+  function llenarSelectDinamico(idElemento, opcionesUnicas) {
+    const select = document.getElementById(idElemento);
+    if (!select) return;
+    
+    const primeraOpcion = select.options[0].outerHTML;
+    let html = primeraOpcion;
+    
+    opcionesUnicas.forEach(opcion => {
+      if(opcion && opcion.trim() !== "") {
+        html += `<option value="${opcion}">${opcion}</option>`;
+      }
+    });
+    
+    select.innerHTML = html;
+  }
+
+  // ==========================================
+  // LECTOR DE TEXTOS ANTICRASH (Usando tu Modal Nativo)
+  // ==========================================
+  function mostrarDetalleExplorador(tipo, idxGlobal) {
+    const row = datosExploradorMemoria[idxGlobal];
+    if (!row) return;
+
+    if (tipo === 'Folio') {
+      document.getElementById('modalNoteTitle').textContent = 'Detalles del Folio';
+      document.getElementById('fullNoteText').textContent = row.folio;
+    } else if (tipo === 'Notas Bot') {
+      document.getElementById('modalNoteTitle').textContent = 'Comentarios del Bot';
+      document.getElementById('fullNoteText').textContent = row.comentarios || "Sin comentarios.";
+    } else if (tipo === 'Indicaciones') {
+      document.getElementById('modalNoteTitle').textContent = 'Indicaciones del Asesor';
+      document.getElementById('fullNoteText').textContent = row.indicaciones || "Sin indicaciones.";
+    }
+    
+    // Abrimos TU modal de siempre
+    document.getElementById('modalNote').style.display = 'flex';
+  }
+
+  // ==========================================
+  // PREVENCIÓN DE CIERRE ACCIDENTAL
+  // ==========================================
+  window.addEventListener('beforeunload', function (e) {
+    if (casoActual !== null) {
+      if (typeof google !== 'undefined') {
+        google.script.run.liberarCasoDinamico(casoActual.numeroFila);
+      }
+      e.preventDefault();
+      e.returnValue = 'Tienes un caso en atención. Si sales, el folio podría quedar bloqueado.';
+    }
+  });
+
+  // ==========================================
+  // OCULTAR SIDEBAR AL HACER CLIC AFUERA
+  // ==========================================
+  document.addEventListener('click', function(event) {
+    const sidebar = document.getElementById('sidebar');
+    const clickAdentro = sidebar.contains(event.target);
+    const clickEnBoton = event.target.closest('.hamburger-btn');
+
+    if (sidebar && sidebar.classList.contains('active') && !clickAdentro && !clickEnBoton) {
+      sidebar.classList.remove('active');
+    }
+  });
+
 </script>

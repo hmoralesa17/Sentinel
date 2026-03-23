@@ -1,16 +1,24 @@
 /**
  * Módulo de Análisis V1.2
- * Lectura acotada (1500 filas) con detección de rezago (ayer y anteriores).
+ * Lectura acotada con detección de rezago (ayer y anteriores).
  */
 
+// Variables de control interno (Fáciles de editar)
+var FILAS_A_LEER = 3000;
+var META_SLA_MINUTOS = 30;
+var TOLERANCIA_LIMBO_MINUTOS = 10;
+
+/**
+ * Calcula las métricas para los chips del Dashboard.
+ */
 function obtenerEstadisticasHoy() {
   var ss = SpreadsheetApp.openById(SHEET_ID);
   var sheet = ss.getSheetByName(SHEET_NAME);
   var lastRow = sheet.getLastRow();
   if (lastRow < 2) return {};
 
-  // Ventana de 3000 filas para cubrir hoy y rezagos de días anteriores
-  var numRows = Math.min(lastRow - 1, 1500);
+  // Ventana de lectura para cubrir hoy y rezagos
+  var numRows = Math.min(lastRow - 1, FILAS_A_LEER);
   var startRow = lastRow - numRows + 1;
   
   var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
@@ -60,10 +68,10 @@ function obtenerEstadisticasHoy() {
       tObj.setHours(parseInt(hP[0]), parseInt(hP[1]), parseInt(hP[2] || 0));
     }
 
-    var usrCode = row[idxUSR].toString().trim();
+    var usrCode = row[idxUSR] ? row[idxUSR].toString().trim() : "";
     var tieneUSR = usrCode !== "";
-    var tieneAtencion = row[idxAtencion].toString().trim() !== "";
-    var tieneClasificacion = idxClasif > -1 ? row[idxClasif].toString().trim() !== "" : false;
+    var tieneAtencion = row[idxAtencion] ? row[idxAtencion].toString().trim() !== "" : false;
+    var tieneClasificacion = idxClasif > -1 && row[idxClasif] ? row[idxClasif].toString().trim() !== "" : false;
     var esBot = usrCode.toUpperCase() === "BOT";
     var resMinutos = normalizarResolucionAMinutos(row[idxRes]);
 
@@ -84,14 +92,14 @@ function obtenerEstadisticasHoy() {
           atendidosHumanos++;
           sumaResHumano += resMinutos;
           if (resMinutos > maxResTotal) maxResTotal = resMinutos;
-          if (resMinutos <= 30) bajoSLA_General++;
+          if (resMinutos <= META_SLA_MINUTOS) bajoSLA_General++; // Parametrizado
 
           if (usrCode === usrActual) {
             stats.miAtendidos++;
             sumaResMi += resMinutos;
             if (resMinutos < minResMi) minResMi = resMinutos;
             if (resMinutos > maxResMi) maxResMi = resMinutos;
-            if (resMinutos <= 30) bajoSLA_Mi++;
+            if (resMinutos <= META_SLA_MINUTOS) bajoSLA_Mi++; // Parametrizado
             tsMiAtencion.push(tObj);
           }
         }
@@ -99,22 +107,10 @@ function obtenerEstadisticasHoy() {
     }
 
     // --- 2. LÓGICA DE PENDIENTES Y REZAGO (TODA LA VENTANA) ---
-    // Si es un caso válido (tiene comentarios bot)
     if (row[idxBot] !== "" && row[idxBot] !== "0") {
-      // Si falta CUALQUIERA de los datos de cierre (Limbo o Pendiente puro)
       if (!tieneAtencion || !tieneUSR || !tieneClasificacion) {
-        
-        // Conteo para chip "En Gestión" (Si tiene usuario pero no cierre)
-        if (tieneUSR && !tieneAtencion) {
-          stats.enGestionHoy++;
-        }
-        
-        // Conteo para chip "Pendientes" (Si nadie lo ha tomado)
-        if (!tieneUSR && !tieneAtencion) {
-          stats.pendientesHoy++;
-        }
-        
-        // Lista para encontrar el folio más viejo (incluyendo días anteriores)
+        if (tieneUSR && !tieneAtencion) stats.enGestionHoy++;
+        if (!tieneUSR && !tieneAtencion) stats.pendientesHoy++;
         tsPendientes.push(tObj);
       }
     }
@@ -126,17 +122,25 @@ function obtenerEstadisticasHoy() {
     stats.maxAtencion = formatearTiempo(maxResTotal);
     stats.cumplimientoSLA = ((bajoSLA_General / atendidosHumanos) * 100).toFixed(0) + "%";
   }
+  
   var totalAtendidos = atendidosHumanos + stats.atendidosBot;
-  if (totalAtendidos > 0) stats.promedioTotal = formatearTiempo((sumaResHumano + sumaResBot) / totalAtendidos);
+  if (totalAtendidos > 0) {
+    stats.promedioTotal = formatearTiempo((sumaResHumano + sumaResBot) / totalAtendidos);
+  }
+  
   if (stats.miAtendidos > 0) {
     stats.miPromedio = formatearTiempo(sumaResMi / stats.miAtendidos);
     stats.miMin = formatearTiempo(minResMi);
     stats.miMax = formatearTiempo(maxResMi);
     stats.miSLA = ((bajoSLA_Mi / stats.miAtendidos) * 100).toFixed(0) + "%";
   }
-  if (stats.atendidosBot > 0) stats.promedioBot = formatearTiempo(sumaResBot / stats.atendidosBot);
+  
+  if (stats.atendidosBot > 0) {
+    stats.promedioBot = formatearTiempo(sumaResBot / stats.atendidosBot);
+  }
   
   const fmtH = (d) => Utilities.formatDate(d, Session.getScriptTimeZone(), "HH:mm:ss");
+  
   if (tsGlobal.length > 0) {
     stats.primerCaso = fmtH(new Date(Math.min.apply(null, tsGlobal)));
     stats.ultimoCaso = fmtH(new Date(Math.max.apply(null, tsGlobal)));
@@ -150,11 +154,10 @@ function obtenerEstadisticasHoy() {
     stats.miUltimoAtn = fmtH(new Date(Math.max.apply(null, tsMiAtencion)));
   }
 
-  // Chip "+ Viejo": Inteligente para mostrar fecha si es de otro día
+  // Chip "+ Viejo" (Con día/mes si es rezago)
   if (tsPendientes.length > 0) {
     var masViejo = new Date(Math.min.apply(null, tsPendientes));
     if (masViejo.getDate() !== hoy.getDate()) {
-       // Si es rezago de ayer, mostramos el día y mes
        stats.viejoPendiente = Utilities.formatDate(masViejo, Session.getScriptTimeZone(), "dd/MM HH:mm");
     } else {
        stats.viejoPendiente = fmtH(masViejo);
@@ -164,13 +167,16 @@ function obtenerEstadisticasHoy() {
   return stats;
 }
 
+/**
+ * Busca los casos en la hoja para llenar la tabla.
+ */
 function obtenerCasosDinamicos() {
   var ss = SpreadsheetApp.openById(SHEET_ID);
   var sheet = ss.getSheetByName(SHEET_NAME);
   var lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
 
-  var numRows = Math.min(lastRow - 1, 1500);
+  var numRows = Math.min(lastRow - 1, FILAS_A_LEER);
   var startRow = lastRow - numRows + 1;
   
   var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
@@ -185,34 +191,38 @@ function obtenerCasosDinamicos() {
 
   for (var i = 0; i < data.length; i++) {
     var fila = data[i];
-    var tieneAtencion = fila[colAtencionIdx].trim() !== "", tieneUSR = fila[colUSRIdx].trim() !== "",
-        tieneBot = fila[colBotIdx] !== "" && fila[colBotIdx] !== "0", tieneFolio = fila[colFolioIdx] !== "",
-        tieneClasif = colClasifIdx > -1 ? fila[colClasifIdx].trim() !== "" : true,
-        tieneIndic = colIndicIdx > -1 ? fila[colIndicIdx].trim() !== "" : true;
     
-    var esCasoPendienteNormal = (!tieneAtencion && !tieneUSR && tieneBot );//&& tieneFolio); te arreglo despues dependes del bot
+    // Validaciones seguras (evita errores de nulos)
+    var tieneAtencion = fila[colAtencionIdx] ? fila[colAtencionIdx].toString().trim() !== "" : false;
+    var tieneUSR = fila[colUSRIdx] ? fila[colUSRIdx].toString().trim() !== "" : false;
+    var tieneBot = fila[colBotIdx] ? fila[colBotIdx].toString() !== "" && fila[colBotIdx].toString() !== "0" : false;
+    var tieneClasif = colClasifIdx > -1 && fila[colClasifIdx] ? fila[colClasifIdx].toString().trim() !== "" : true;
+    var tieneIndic = colIndicIdx > -1 && fila[colIndicIdx] ? fila[colIndicIdx].toString().trim() !== "" : true;
+    
+    var esCasoPendienteNormal = (!tieneAtencion && !tieneUSR && tieneBot);
     var esLimbo = false;
 
-    if ((!tieneAtencion || !tieneClasif || !tieneIndic) && tieneUSR && tieneBot ) {//&& tieneFolio
-      if (colInicioAtnIdx > -1) {
-        var inicioAtnStr = fila[colInicioAtnIdx];
-        if (inicioAtnStr !== "") {
-          try {
-            var fechaInicio;
-            if (inicioAtnStr.includes("/") && inicioAtnStr.includes(":")) {
-               var partes = inicioAtnStr.split(" ");
-               var fP = partes[0].split("/");
-               var hP = partes[1].split(":");
-               fechaInicio = new Date(fP[2], fP[1]-1, fP[0], hP[0], hP[1], hP[2] || 0);
-            } else {
-               fechaInicio = new Date(inicioAtnStr);
-            }
-            if (!isNaN(fechaInicio.getTime())) {
-              var diffMinutos = (ahora - fechaInicio) / (1000 * 60);
-              if (diffMinutos > 10) esLimbo = true;
-            }
-          } catch(e) {}
-        }
+    // Lógica del Limbo
+    if ((!tieneAtencion || !tieneClasif || !tieneIndic) && tieneUSR && tieneBot) {
+      if (colInicioAtnIdx > -1 && fila[colInicioAtnIdx] !== "") {
+        try {
+          var inicioAtnStr = fila[colInicioAtnIdx].toString();
+          var fechaInicio;
+          
+          if (inicioAtnStr.includes("/") && inicioAtnStr.includes(":")) {
+             var partes = inicioAtnStr.split(" ");
+             var fP = partes[0].split("/");
+             var hP = partes[1].split(":");
+             fechaInicio = new Date(fP[2], fP[1]-1, fP[0], hP[0], hP[1], hP[2] || 0);
+          } else {
+             fechaInicio = new Date(inicioAtnStr);
+          }
+          
+          if (!isNaN(fechaInicio.getTime())) {
+            var diffMinutos = (ahora - fechaInicio) / (1000 * 60);
+            if (diffMinutos > TOLERANCIA_LIMBO_MINUTOS) esLimbo = true; // Parametrizado
+          }
+        } catch(e) {}
       }
     }
 
@@ -222,7 +232,12 @@ function obtenerCasosDinamicos() {
         var idx = headers.indexOf(col); 
         obj[col] = idx > -1 ? fila[idx] : ""; 
       });
-      casos.push({ numeroFila: startRow + i, datos: obj, esLimbo: esLimbo, usuarioOriginal: tieneUSR ? fila[colUSRIdx] : "" });
+      casos.push({ 
+        numeroFila: startRow + i, 
+        datos: obj, 
+        esLimbo: esLimbo, 
+        usuarioOriginal: tieneUSR ? fila[colUSRIdx] : "" 
+      });
     }
   }
   return casos;

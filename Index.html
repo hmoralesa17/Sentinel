@@ -5,7 +5,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <!-- Módulo de Estilos: Trae todo el CSS desde CSS.html -->
   <?!= include('CSS'); ?>
 </head>
 <body>
@@ -13,74 +12,116 @@
 <?!= include('Sidebar'); ?>
 
 <div class="container">
-  <!-- DASHBOARD CABECERA (FIJO) -->
-  <div class="dashboard-header">
-    <div class="stats-section" id="secBot">
-      <div class="group-label" onclick="toggleSection('secBot')">DATOS BOT <span class="toggle-icon">&lt;</span></div>
-      <div class="stats-group">
-        <div class="stat-chip bot-stat non-essential"><span class="stat-label">Atención</span><span class="stat-val" id="stAtendidosBot">0</span></div>
-        <div class="stat-chip bot-stat non-essential"><span class="stat-label">Tiempo</span><span class="stat-val" id="stPromBot">0:00</span></div>
-        <div class="stat-chip bot-stat"><span class="stat-label">Último</span><span class="stat-val" id="stUltimoBot">--:--</span></div>
-      </div>
-    </div>
+
+  <div class="view-header">
+    <div class="header-left" style="flex: 1;"></div>
     
-    <div class="stats-section" id="secGeneral">
-      <div class="group-label" onclick="toggleSection('secGeneral')">DATOS GENERAL <span class="toggle-icon">&lt;</span></div>
-      <div class="stats-group">
-        <div class="stat-chip highlight non-essential"><span class="stat-label">FOLIOS</span><span class="stat-val" id="stFoliosHoy">0</span></div>
-        <div class="stat-chip highlight non-essential"><span class="stat-label">Atención</span><span class="stat-val" id="stAtendidosHoy">0</span></div>
-        <div class="stat-chip danger-stat"><span class="stat-label">Pendientes</span><span class="stat-val" id="stPendientes">0</span></div>
-        <div class="stat-chip warn-stat"><span class="stat-label">Gestión</span><span class="stat-val" id="stEnGestion">0</span></div>
-        <div class="stat-chip highlight non-essential" style="width: 80px;"><span class="stat-label">EQU | TOT</span><span class="stat-val"><span id="stPromHumano">0:00</span>|<span id="stPromTotal">0:00</span></span></div>
-        <div class="stat-chip highlight non-essential"><span class="stat-label">Max</span><span class="stat-val" id="stMaxTotal">0:00</span></div>
-        <div class="stat-chip highlight"><span class="stat-label">Último</span><span class="stat-val" id="stUltimo">--:--</span></div>
-        <div class="stat-chip highlight"><span class="stat-label">+ Viejo</span><span class="stat-val" id="stViejoPendiente">--:--</span></div>
-        <div class="stat-chip highlight non-essential"><span class="stat-label">% SLA</span><span class="stat-val" id="stSLA">0%</span></div>
-      </div>
-    </div>
-
-    <div class="stats-section" id="secMiGestion">
-      <div class="group-label" onclick="toggleSection('secMiGestion')">MI GESTIÓN <span class="toggle-icon">&lt;</span></div>
-      <div class="stats-group">
-        <div class="stat-chip user-stat"><span class="stat-label">Atención</span><span class="stat-val" id="stMiAtendidosVal">0</span></div>
-        <div class="stat-chip user-stat"><span class="stat-label">Tiempo</span><span class="stat-val" id="stMiPromedioVal">0:00</span></div>
-        <div class="stat-chip user-stat non-essential"><span class="stat-label">Max</span><span class="stat-val" id="stMiMax">0:00</span></div>
-        <div class="stat-chip user-stat non-essential"><span class="stat-label">Min</span><span class="stat-val" id="stMiMin">0:00</span></div>
-        <div class="stat-chip user-stat non-essential"><span class="stat-label">% SLA</span><span class="stat-val" id="stMiSLA">0%</span></div>
-        <div class="stat-chip user-stat non-essential"><span class="stat-label">Primer</span><span class="stat-val" id="stMiPrimeraAtn">--:--</span></div>
-        <div class="stat-chip user-stat non-essential"><span class="stat-label">Último</span><span class="stat-val" id="stMiUltimaAtn">--:--</span></div>
+    <h1 id="mainTitle">Bienvenido - Hub Sentinel Fraudes RI-FI <span id="displayFolio" style="display:none;"></span></h1>
+    
+    <div class="header-right" style="flex: 1; display: flex; justify-content: flex-end;">
+      <div id="userProfile" class="user-profile" style="position: relative; top: 0; right: 0;">
+        <span class="name" id="userName">Cargando...</span>
+        <span class="id-usr" id="userIdUsr">---</span>
+        <span class="no-emp" id="userNoEmp">S/N</span>
       </div>
     </div>
   </div>
 
-  <div id="userProfile" class="user-profile">
-    <span class="name" id="userName">Cargando...</span>
-    <span class="id-usr" id="userIdUsr">---</span>
-    <span class="no-emp" id="userNoEmp">S/N</span>
-  </div>
-
-  <!-- VISTA 1: LISTADO -->
-  <div id="viewLista" class="view active">
-    <div class="view-header">
-      <div class="header-left-spacer"></div>
-      <h1>Folios Biométricos</h1>
-      <div class="header-action">
-        <div class="stat-chip warn-stat" style="width: 130px; max-width: 130px;"><span class="stat-label">DEBES REALIZAR UNA</span><span class="stat-val">RECARGA CONSTANTE</span></div>
-        <div class="stat-chip sync-stat" style="width: 55px; max-width: 55px;"><span class="stat-label">ÚLT Carga</span><span class="stat-val" id="stLastSync">--:--</span></div>
-        <button class="btn btn-update" onclick="cargarCasos()">🔄 Actualizar Datos</button>
+  <div id="viewHome" class="view active">
+    <div class="home-grid">
+      
+      <div class="home-card" onclick="navegar('atencion')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+        <h3>Módulo de Atención Folios</h3>
+        <p>Atención de folios biométricos en tienda.</p>
       </div>
+
+      <div class="home-card" onclick="navegar('explorador')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <h3>Módulo Buscador de Folios</h3>
+        <p>Búsqueda de folios avanzada, filtros y auditoría de casos históricos.</p>
+      </div>
+      
+      <div class="home-card" id="cardConfigHome" onclick="navegar('config')" style="display:none;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+        <h3>Mesa de Control</h3>
+        <p>Variables, métricas y configuración general.</p>
+      </div>
+      
     </div>
-    <div class="table-wrapper" id="tablaContenedor"></div>
   </div>
 
-  <!-- VISTA 2: ATENCIÓN -->
+  <div id="viewLista" class="view">
+    
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; margin-bottom: 5px;">
+      
+      <div class="dashboard-header" style="flex: 1 1 auto; margin-right: 0; margin-bottom: 0;">
+        <div class="stats-section" id="secBot">
+          <div class="group-label" onclick="toggleSection('secBot')">DATOS BOT <span class="toggle-icon">&lt;</span></div>
+          <div class="stats-group">
+            <div class="stat-chip bot-stat non-essential"><span class="stat-label">Atención</span><span class="stat-val" id="stAtendidosBot">0</span></div>
+            <div class="stat-chip bot-stat non-essential"><span class="stat-label">Tiempo</span><span class="stat-val" id="stPromBot">0:00</span></div>
+            <div class="stat-chip bot-stat"><span class="stat-label">Último</span><span class="stat-val" id="stUltimoBot">--:--</span></div>
+          </div>
+        </div>
+        
+        <div class="stats-section" id="secGeneral">
+          <div class="group-label" onclick="toggleSection('secGeneral')">DATOS GENERAL <span class="toggle-icon">&lt;</span></div>
+          <div class="stats-group">
+            <div class="stat-chip highlight non-essential"><span class="stat-label">FOLIOS</span><span class="stat-val" id="stFoliosHoy">0</span></div>
+            <div class="stat-chip highlight non-essential"><span class="stat-label">Atención</span><span class="stat-val" id="stAtendidosHoy">0</span></div>
+            <div class="stat-chip danger-stat"><span class="stat-label">Pendientes</span><span class="stat-val" id="stPendientes">0</span></div>
+            <div class="stat-chip warn-stat"><span class="stat-label">Gestión</span><span class="stat-val" id="stEnGestion">0</span></div>
+            <div class="stat-chip highlight non-essential" style="width: 80px;"><span class="stat-label">EQU | TOT</span><span class="stat-val"><span id="stPromHumano">0:00</span>|<span id="stPromTotal">0:00</span></span></div>
+            <div class="stat-chip highlight non-essential"><span class="stat-label">Max</span><span class="stat-val" id="stMaxTotal">0:00</span></div>
+            <div class="stat-chip highlight"><span class="stat-label">Último</span><span class="stat-val" id="stUltimo">--:--</span></div>
+            <div class="stat-chip highlight"><span class="stat-label">+ Viejo</span><span class="stat-val" id="stViejoPendiente">--:--</span></div>
+            <div class="stat-chip highlight non-essential"><span class="stat-label">% SLA</span><span class="stat-val" id="stSLA">0%</span></div>
+          </div>
+        </div>
+
+        <div class="stats-section" id="secMiGestion">
+          <div class="group-label" onclick="toggleSection('secMiGestion')">MI GESTIÓN <span class="toggle-icon">&lt;</span></div>
+          <div class="stats-group">
+            <div class="stat-chip user-stat"><span class="stat-label">Atención</span><span class="stat-val" id="stMiAtendidosVal">0</span></div>
+            <div class="stat-chip user-stat"><span class="stat-label">Tiempo</span><span class="stat-val" id="stMiPromedioVal">0:00</span></div>
+            <div class="stat-chip user-stat non-essential"><span class="stat-label">Max</span><span class="stat-val" id="stMiMax">0:00</span></div>
+            <div class="stat-chip user-stat non-essential"><span class="stat-label">Min</span><span class="stat-val" id="stMiMin">0:00</span></div>
+            <div class="stat-chip user-stat non-essential"><span class="stat-label">% SLA</span><span class="stat-val" id="stMiSLA">0%</span></div>
+            <div class="stat-chip user-stat non-essential"><span class="stat-label">Primer</span><span class="stat-val" id="stMiPrimeraAtn">--:--</span></div>
+            <div class="stat-chip user-stat non-essential"><span class="stat-label">Último</span><span class="stat-val" id="stMiUltimaAtn">--:--</span></div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="stats-section" style="flex: 0 0 auto; align-items: flex-end;">
+        
+        <div class="group-label" style="cursor: default; padding-bottom: 4px;">
+          REALIZA UNA <span style="color: var(--primary); margin: 0 4px;">RECARGA</span> CONSTANTE
+        </div>
+        
+        <div class="stats-group" style="align-items: center; gap: 8px; margin-top: 2px;">
+          <div class="stat-chip sync-stat" style="width: 55px; max-width: 55px;">
+            <span class="stat-label">ÚLT Carga</span>
+            <span class="stat-val" id="stLastSync">--:--</span>
+          </div>
+          <button class="btn btn-update" style="margin: 0; height: 36px;" onclick="cargarCasos()">Buscar Folios</button>
+        </div>
+      </div>
+
+    </div> <div class="table-wrapper" id="tablaContenedor"></div>
+  </div>
+
   <div id="viewAtencion" class="view">
-    <div class="view-header">
-      <div class="header-left-spacer"></div>
-      <h1>Atención Folio: <span id="displayFolio"></span></h1>
-      <div class="header-action">
-        <button class="btn btn-secondary" onclick="cancelarAtencion()">⬅️ Volver y Liberar Trámite</button>
+    
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding: 0 5px;">
+      <div style="color: var(--secondary); font-size: 13.5px; font-weight: 700; display: flex; align-items: center; gap: 8px; letter-spacing: 0.3px;">
+        <span style="font-size: 16px;">⏱️</span> Atención en curso...
       </div>
+      <button class="btn btn-secondary" style="padding: 8px 16px; font-size: 13.5px;" onclick="cancelarAtencion()">⬅️ Cancelar Atención</button>
     </div>
 
     <div class="atencion-header-data" id="infoGeneralContainer">
@@ -104,7 +145,7 @@
                 <tr style="text-align:left; background:#f8f9fa; border-bottom:1px solid #dee2e6;">
                   <th class="hist-fecha">Fecha Folio</th>
                   <th class="hist-folio">Folio</th>
-                  <th class="hist-atencion">Atención</th>
+                  <th class="hist-curp">CURP</th>      <th class="hist-cuenta">Cuenta</th>  <th class="hist-atencion">Atención</th>
                   <th class="hist-usr">USR</th>
                   <th class="hist-clasif">Clasificación</th>
                   <th class="hist-notas">Notas</th>
@@ -125,9 +166,82 @@
       </div>
     </div>
   </div>
-</div>
+  
+<div id="viewExplorador" class="view">
+    
+    <div class="filter-dashboard" style="padding: 10px 15px; margin-bottom: 5px; gap: 0;">
+      
+      <div style="display: flex; align-items: center; border-bottom: 1px solid #dee2e6; padding-bottom: 8px;">
+        
+        <div style="display: flex; align-items: center; gap: 10px; cursor: pointer; flex-grow: 1;" onclick="toggleFiltrosExplorador()">
+          <span style="font-weight: 800; color: var(--secondary); font-size: 13px;">🔍 DASHBOARD DE FILTROS</span>
+          <button id="btnToggleFiltros" class="toggle-info-btn" style="padding: 2px 8px; font-size: 10px; margin: 0; pointer-events: none;">OCULTAR ▲</button>
+        </div>
+        
+        <div style="display: flex; gap: 10px;">
+          <button class="btn btn-secondary" onclick="limpiarFiltrosExplorador()" style="padding: 5px 15px; margin: 0; font-size: 12px;">🧹 Limpiar</button>
+          <button class="btn" onclick="buscarEnExplorador()" style="padding: 5px 20px; margin: 0; width: auto; font-size: 12px;">🔍 Buscar Folios</button>
+        </div>
+      </div>
+      
+      <div id="filterContainer" class="filter-grid" style="padding-top: 15px;">
+        <div class="filter-group col-span-2">
+          <label>Marca Temporal (Rango)</label>
+          <div style="display: flex; gap: 10px;">
+            <input type="date" id="filtroFechaInicio" class="filter-input" title="Desde">
+            <input type="date" id="filtroFechaFin" class="filter-input" title="Hasta">
+          </div>
+        </div>
 
-<!-- MODALES -->
+        <div class="filter-group col-span-2">
+          <label>Resolución (Minutos)</label>
+          <div style="display: flex; gap: 10px;">
+            <select id="filtroResCondicion" class="filter-input" style="width: 140px;">
+              <option value="">Cualquiera</option>
+              <option value="mayor">Mayor a ></option>
+              <option value="menor">Menor a <</option>
+            </select>
+            <input type="number" id="filtroResMinutos" class="filter-input" placeholder="Min." style="width: 100px;">
+          </div>
+        </div>
+        
+        <div class="filter-group"><label>Folio (Exacto)</label><input type="text" id="filtroFolio" class="filter-input" placeholder="Ej. PF-260228..."></div>
+        <div class="filter-group"><label>CURP (Exacto)</label><input type="text" id="filtroCurp" class="filter-input" placeholder="18 caracteres" maxlength="18"></div>
+        <div class="filter-group"><label>Cuenta (Exacto)</label><input type="text" id="filtroCuenta" class="filter-input" placeholder="19 dígitos" maxlength="19"></div>
+        <div class="filter-group"><label>Tienda</label><input type="text" id="filtroTienda" class="filter-input" placeholder="Ej. 0577"></div>
+        
+        <div class="filter-group"><label>Creador (Alias antes del @)</label><input type="text" id="filtroCorreo" class="filter-input" placeholder="Ej. HMORALESA"></div>
+        <div class="filter-group"><label>Analista (USR)</label><input type="text" id="filtroUsr" class="filter-input" placeholder="Ej. HOA"></div>
+        
+        <div class="filter-group"><label>Tipo Identificación</label><select id="filtroTipoId" class="filter-input"><option value="">Todos</option></select></div>
+        <div class="filter-group"><label>Tipo Caso</label><select id="filtroTipoCaso" class="filter-input"><option value="">Todos</option></select></div>
+        <div class="filter-group"><label>Clasificación</label><select id="filtroClasificacion" class="filter-input"><option value="">Todas</option></select></div>
+      </div>
+    </div>
+
+    <div class="table-wrapper" id="tablaExploradorContenedor" style="margin-top: 0px; flex: 1; border: 1px solid #eee; border-radius: 8px; background: #fff; overflow: auto;">
+      <div style="text-align:center; padding:60px 20px; color:#999; font-size:15px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width: 60px; height: 60px; color: #ddd; margin-bottom: 15px; display: block; margin-left: auto; margin-right: auto;">
+          <circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        Ingresa tus criterios en el dashboard de arriba y presiona "Buscar Folios".
+      </div>
+    </div>
+
+  </div>
+
+  <div id="viewConfig" class="view">
+    <div style="padding: 20px; text-align: center; color: #6b7280;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 60px; height: 60px; margin-bottom: 15px; color: var(--primary);">
+        <circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+      </svg>
+      <h2>Módulo en construcción...</h2>
+      <p>Aquí pondremos los controles de la aplicación muy pronto.</p>
+    </div>
+  </div>
+
+</div> 
+
 <div id="modalNote" class="modal-overlay" onclick="cerrarModalNote()">
   <div class="modal-note-content" onclick="event.stopPropagation()">
     <h3 id="modalNoteTitle">Detalle</h3>
@@ -142,7 +256,6 @@
 <div id="loading" class="loading-overlay"><div class="spinner"></div><div id="loadingText" style="font-weight:700; color:var(--secondary); font-size: 16px;">Sincronizando...</div></div>
 <div id="toast" class="toast"></div>
 
-<!-- Módulo de Lógica: Trae todo el JavaScript desde JS.html -->
 <?!= include('JS'); ?>
 
 </body>

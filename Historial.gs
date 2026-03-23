@@ -1,6 +1,6 @@
 /**
  * Módulo de Historial V1.0
- * Búsqueda rápida en toda la base de datos.
+ * Búsqueda rápida en toda la base de datos con ordenamiento seguro.
  */
 
 function obtenerHistorialCaso(curp, cuenta) {
@@ -26,24 +26,54 @@ function obtenerHistorialCaso(curp, cuenta) {
   var sCurp = curp ? curp.toString().trim() : "";
   var sCuenta = cuenta ? cuenta.toString().trim() : "";
 
+  // Optimización: Empezamos en 1 para saltar los encabezados
   for (var i = 1; i < data.length; i++) {
     var row = data[i];
     var rCurp = row[idxCurp] ? row[idxCurp].toString().trim() : "";
     var rCuenta = row[idxCuenta] ? row[idxCuenta].toString().trim() : "";
 
+    // Si coincide el CURP o la Cuenta
     if ((sCurp !== "" && rCurp === sCurp) || (sCuenta !== "" && rCuenta === sCuenta)) {
+      
+      // 1. Manejo seguro de la Fecha de Creación
+      var rawFecha = row[idxFecha];
+      var strFecha = rawFecha;
+      var tsOrdenamiento = 0; // Timestamp para ordenar
+      
+      if (rawFecha instanceof Date) {
+        strFecha = Utilities.formatDate(rawFecha, Session.getScriptTimeZone(), "dd/MM/yyyy HH:mm:ss");
+        tsOrdenamiento = rawFecha.getTime();
+      } else if (rawFecha !== "") {
+        // Si no es un objeto fecha, intentamos convertirlo
+        tsOrdenamiento = new Date(rawFecha).getTime() || 0;
+      }
+
+      // 2. Manejo seguro de la Fecha de Atención
+      var rawAtn = row[idxAtencion];
+      var strAtencion = "En Proceso";
+      
+      if (rawAtn instanceof Date) {
+        strAtencion = Utilities.formatDate(rawAtn, Session.getScriptTimeZone(), "dd/MM/yyyy HH:mm:ss");
+      } else if (rawAtn !== "") {
+        strAtencion = rawAtn.toString();
+      }
+
       historial.push({ 
-        fecha: Utilities.formatDate(new Date(row[idxFecha]), Session.getScriptTimeZone(), "dd/MM/yyyy HH:mm:ss"), 
-        atencion: row[idxAtencion] ? Utilities.formatDate(new Date(row[idxAtencion]), Session.getScriptTimeZone(), "dd/MM/yyyy HH:mm:ss") : "En Proceso", 
-        folio: row[idxFolio], 
-        usr: row[idxUsr], 
-        clasificacion: row[idxClasif], 
-        indicaciones: row[idxIndic] 
+        fecha: strFecha, 
+        atencion: strAtencion, 
+        folio: row[idxFolio] ? row[idxFolio].toString() : "S/N", 
+        curp: rCurp,      // <--- NUEVO
+        cuenta: rCuenta,  // <--- NUEVO
+        usr: row[idxUsr] ? row[idxUsr].toString() : "", 
+        clasificacion: row[idxClasif] ? row[idxClasif].toString() : "", 
+        indicaciones: row[idxIndic] ? row[idxIndic].toString() : "",
+        _timestamp: tsOrdenamiento 
       });
     }
   }
   
-  // Ordenar por folio de forma descendente (el más reciente primero)
-  historial.sort((a, b) => b.folio - a.folio);
+  // 3. Ordenar matemáticamente usando el timestamp oculto (Descendente: más reciente primero)
+  historial.sort((a, b) => b._timestamp - a._timestamp);
+  
   return historial;
 }

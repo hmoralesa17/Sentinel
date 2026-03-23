@@ -1,13 +1,12 @@
-Session.getActiveUser().getEmail();
 /**
  * Módulo Core y Configuración V1.0
  * Archivo Principal de Configuración y Control de Acceso
  */
 
-var VERSION_APP = 15;
+var VERSION_APP = 153;
 var SHEET_ID = '1h9zkrvgmH0r-K1wokCVgo3c_aGEKbqBMH03VHL6flDo';
 var SHEET_NAME = 'Respuestas de formulario 2';
-var CATALOG_SHEET_NAME = 'Notas Bot'; 
+var CATALOG_SHEET_NAME = 'Notas'; 
 var SHEET_EQUIPO_ID = '1JhuWplwWV8k2yj2qI9g0j0niCJlkmnnzH50II1V8aQ0';
 var SHEET_EQUIPO_NAME = 'Datos_Equipo';
 
@@ -21,6 +20,23 @@ var DICCIONARIO_USUARIOS = {
   "mabalderasv@liverpool.com.mx": "LBR",
   "nchilpac@liverpool.com.mx": "NPC"
 };
+
+var ADMINS = ["eurodriguezs", "hmoralesa", "mhuertasa"];
+
+/**
+ * Verifica si el usuario activo tiene privilegios de administrador.
+ * Se llama desde el frontend para mostrar u ocultar la Mesa de Control.
+ * @returns {boolean} True si es admin, False si es usuario normal.
+ */
+function verificarSiEsAdmin() {
+  var email = Session.getActiveUser().getEmail().toLowerCase();
+  
+  // Extraemos solo la parte antes del @ (ej. hmoralesa)
+  var prefijo = email.split('@')[0];
+  
+  // Revisamos si ese prefijo está en nuestra lista de ADMINS
+  return ADMINS.indexOf(prefijo) > -1;
+}
 
 var USUARIOS_AUTORIZADOS = Object.keys(DICCIONARIO_USUARIOS);
 
@@ -41,7 +57,7 @@ function doGet() {
     if (verificarAcceso(emailUsuario)) {
       var template = HtmlService.createTemplateFromFile('Index');
       return template.evaluate()
-        .setTitle('Gestor Sentinel Fraudes RI-FI')
+        .setTitle('Sentinel Gestor Fraudes RI-FI')
         .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
         .addMetaTag('viewport', 'width=device-width, initial-scale=1');
     } else {

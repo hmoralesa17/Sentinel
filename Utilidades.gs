@@ -282,3 +282,47 @@ function crearPantallaError(error, email) {
     return HtmlService.createHtmlOutput("<h1>Error Fatal</h1><p>El sistema colapsó por completo. Contacte a hmoralesa@liverpool.com.mx de inmediato.</p>");
   }
 }
+
+/**
+ * =======================================================
+ * MÓDULO EXPLORADOR: EXTRAER CATÁLOGOS DINÁMICOS
+ * =======================================================
+ */
+function obtenerCatalogosExplorador() {
+  try {
+    var ss = SpreadsheetApp.openById(SHEET_ID);
+    var sheet = ss.getSheetByName(SHEET_NAME);
+    
+    // Traemos todos los datos para procesarlos rápido en memoria
+    var data = sheet.getDataRange().getValues();
+    var headers = data[0];
+    
+    // Buscamos en qué columna está cada dato
+    var idxTipoId = headers.indexOf("Tipo de Identificación");
+    var idxTipoCaso = headers.indexOf("Tipo Caso");
+    var idxClasif = headers.indexOf("Clasificación");
+    
+    // Usamos objetos como "Sets" para eliminar duplicados fácilmente
+    var setTipoId = {};
+    var setTipoCaso = {};
+    var setClasif = {};
+    
+    // Recorremos la base de datos (saltando la fila 1 de encabezados)
+    for (var i = 1; i < data.length; i++) {
+      var row = data[i];
+      if (idxTipoId >= 0 && row[idxTipoId]) setTipoId[row[idxTipoId].toString().trim()] = true;
+      if (idxTipoCaso >= 0 && row[idxTipoCaso]) setTipoCaso[row[idxTipoCaso].toString().trim()] = true;
+      if (idxClasif >= 0 && row[idxClasif]) setClasif[row[idxClasif].toString().trim()] = true;
+    }
+    
+    return { 
+      exito: true, 
+      tipoId: Object.keys(setTipoId).sort(),
+      tipoCaso: Object.keys(setTipoCaso).sort(),
+      clasificacion: Object.keys(setClasif).sort()
+    };
+    
+  } catch (e) {
+    return { exito: false, mensaje: e.toString() };
+  }
+}

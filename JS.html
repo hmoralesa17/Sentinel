@@ -8,6 +8,7 @@
   const COL_TABLA = ["FOLIO", "Marca temporal", "CURP", "Cuenta", "Tipo de Identificación", "Tipo Cliente", "Tipo Caso", "Servicio", "Tienda", "Dirección de correo electrónico"];
   const MAP_LABELS = { "Marca temporal": "FECHA FOLIO", "Tipo de Identificación": "TIPO ID", "Dirección de correo electrónico": "Correo del Folio", "Repetido": "Repetido", "Comentarios Bot": "Comentarios Bot" };
   let catalogo = [], casoParaConfirmar = null, casoActual = null, casosCargados = [];
+  let configYaCargada = false; // Bandera para saber si ya descargamos la Mesa de Control
 
   function toggleSection(id) {
     const el = document.getElementById(id);
@@ -466,6 +467,11 @@ function navegar(pantalla) {
       document.getElementById('menuConfig').classList.add('active'); 
       document.getElementById('viewConfig').classList.add('active'); 
       if(tituloGlobal) tituloGlobal.innerText = 'Mesa de Control - Configuración'; 
+      
+      // Solo carga del servidor si es la primera vez en esta sesión
+      if (!configYaCargada) {
+        cargarConfiguracion(); 
+      }
     }
   }
 
@@ -561,7 +567,7 @@ function navegar(pantalla) {
     const paginaDatos = datosExploradorMemoria.slice(inicio, fin);
 
     let html = `
-      <div style="overflow-x: auto; max-height: calc(100vh - 210px); border-bottom: 1px solid #dee2e6;">
+      <div style="flex: 1; overflow: auto; border-bottom: 1px solid #dee2e6;">
         <table style="width: 100%; border-collapse: collapse; min-width: 2600px; font-size: 11.5px; text-align: center; white-space: nowrap;">
           <thead style="position: sticky; top: 0; background: var(--secondary); color: #fff; z-index: 2;">
             <tr>
@@ -638,7 +644,7 @@ function navegar(pantalla) {
     html += `</tbody></table></div>`;
 
     html += `
-      <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; background: #f8f9fa;">
+      <div style="flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; background: #f8f9fa;">
         <div style="font-size: 13px; color: #555;">
           Mostrando <b>${inicio + 1}</b> al <b>${fin}</b> de <b style="color: var(--primary); font-size: 14px;">${datosExploradorMemoria.length}</b> folios encontrados.
         </div>
@@ -736,5 +742,238 @@ function navegar(pantalla) {
       sidebar.classList.remove('active');
     }
   });
+
+
+  // ==========================================
+  // MÓDULO MESA DE CONTROL (GLOBAL + DICCIONARIO)
+  // ==========================================
+  
+    function cargarConfiguracion() {
+    document.getElementById('loadingText').textContent = "Descifrando variables...";
+    document.getElementById('loading').style.display = 'flex';
+
+    runGAS('leerConfiguracionGeneral', cfg => {
+      document.getElementById('cfg_filas').value          = cfg.filas;
+      document.getElementById('cfg_limbo').value          = cfg.limbo;
+      document.getElementById('cfg_sla').value            = cfg.sla;
+      document.getElementById('cfg_sheetId').value        = cfg.sheetId;
+      document.getElementById('cfg_sheetName').value      = cfg.sheetName;
+      document.getElementById('cfg_catalogName').value    = cfg.catalogName;
+      document.getElementById('cfg_backupFolderId').value = cfg.backupFolderId || "";
+      document.getElementById('cfg_admins').value         = cfg.admins;
+      document.getElementById('cfg_soporte').value        = cfg.soporte;
+      document.getElementById('cfg_appTitle').value       = cfg.appTitle;
+      document.getElementById('cfg_appVersion').value     = cfg.appVersion;
+      document.getElementById('cfg_mod1Title').value      = cfg.mod1Title;
+      document.getElementById('cfg_mod1Desc').value       = cfg.mod1Desc;
+      document.getElementById('cfg_mod2Title').value      = cfg.mod2Title;
+      document.getElementById('cfg_mod2Desc').value       = cfg.mod2Desc;
+      
+      // REINICIAR SEGURIDAD VISUAL PARA AMBOS CAMPOS
+      ['cfg_sheetId', 'cfg_backupFolderId'].forEach(id => {
+        const input = document.getElementById(id);
+        const group = document.getElementById('group_' + id.replace('cfg_', '')); // Maneja ambos group_
+        const iconHide = document.getElementById('icon_hide_' + id);
+        const iconShow = document.getElementById('icon_show_' + id);
+        
+        if(input) input.type = 'password';
+        // Ajuste temporal para el group ID que no sigue la regla exacta:
+        const groupReal = document.getElementById(id === 'cfg_sheetId' ? 'group_sheetId' : 'group_backupFolderId');
+        if(groupReal) groupReal.classList.remove('security-visible');
+        if(iconHide) iconHide.style.display = 'inline-block';
+        if(iconShow) iconShow.style.display = 'none';
+      });
+
+      let diccionarioData = [];
+      try { diccionarioData = JSON.parse(cfg.diccionario); } catch(e) {}
+      
+      const tbody = document.getElementById('diccionario_body');
+      tbody.innerHTML = ''; 
+      if(diccionarioData.length === 0) agregarFilaDiccionario();
+      else diccionarioData.forEach(col => agregarFilaDiccionario(col));
+      
+      configYaCargada = true; 
+      document.getElementById('loading').style.display = 'none';
+    });
+  }
+
+  function guardarConfiguracion() {
+    // 1. RECOLECTAR DATOS DE LA TABLA DICCIONARIO
+    const tbody = document.getElementById('diccionario_body');
+    const filas = tbody.querySelectorAll('tr');
+    let jsonDiccionario = [];
+
+    filas.forEach(tr => {
+      // OJO: Se agregó "textarea" a la búsqueda
+      const inputs = tr.querySelectorAll('input, select, textarea');
+      
+      // Solo guardar si escribieron el Nombre en BD
+      if(inputs[0] && inputs[0].value.trim() !== '') {
+        jsonDiccionario.push({
+          bd: inputs[0].value.trim(),
+          visual: inputs[1].value.trim(),
+          tipo: inputs[2].value,
+          desc: inputs[3].value.trim(),   // <--- Ahora viene del TEXTAREA
+          filtro: inputs[4].checked,
+          editable: inputs[5].checked
+        });
+      }
+    });
+
+    // 2. RECOLECTAR EL RESTO DE LAS VARIABLES
+    const datosConfig = {
+      filas:          document.getElementById('cfg_filas').value,
+      limbo:          document.getElementById('cfg_limbo').value,
+      sla:            document.getElementById('cfg_sla').value,
+      sheetId:        document.getElementById('cfg_sheetId').value,
+      sheetName:      document.getElementById('cfg_sheetName').value,
+      catalogName:    document.getElementById('cfg_catalogName').value,
+      backupFolderId: document.getElementById('cfg_backupFolderId').value, // <--- NUEVO
+      admins:         document.getElementById('cfg_admins').value,
+      soporte:        document.getElementById('cfg_soporte').value,
+      appTitle:       document.getElementById('cfg_appTitle').value,
+      appVersion:     document.getElementById('cfg_appVersion').value,
+      mod1Title:      document.getElementById('cfg_mod1Title').value,
+      mod1Desc:       document.getElementById('cfg_mod1Desc').value,
+      mod2Title:      document.getElementById('cfg_mod2Title').value,
+      mod2Desc:       document.getElementById('cfg_mod2Desc').value,
+      diccionario:    JSON.stringify(jsonDiccionario)
+    };
+
+    // 3. ENVIAR A GOOGLE APPS SCRIPT
+    document.getElementById('loadingText').textContent = "Encriptando y respaldando en Drive...";
+    document.getElementById('loading').style.display = 'flex';
+
+    runGAS('guardarConfiguracionGeneral', res => {
+      document.getElementById('loading').style.display = 'none';
+      if(res && res.exito) {
+        showToast("¡Configuración guardada y respaldada en Drive!", "success");
+      } else {
+        mostrarError("Error al guardar/respaldar: " + (res ? res.mensaje : "Desconocido"));
+      }
+    }, datosConfig);
+  }
+
+  // --- FUNCIONES DEL DICCIONARIO INTERACTIVO ---
+  function agregarFilaDiccionario(datos = null) {
+    const tbody = document.getElementById('diccionario_body');
+    const tr = document.createElement('tr');
+    
+    const dbVal = datos ? datos.bd : '';
+    const visVal = datos ? datos.visual : '';
+    const tipo = datos ? datos.tipo : 'Texto';
+    const descVal = (datos && datos.desc) ? datos.desc : ''; 
+    const filChk = (datos && datos.filtro) ? 'checked' : '';
+    const edChk = (datos && datos.editable) ? 'checked' : '';
+
+    tr.innerHTML = `
+      <td><input type="text" class="schema-input" style="font-weight: bold; color: var(--secondary);" value="${dbVal}" placeholder="Ej. CURP"></td>
+      <td><input type="text" class="schema-input" value="${visVal}" placeholder="Ej. CURP Cliente"></td>
+      <td>
+        <select class="schema-select">
+          <option ${tipo === 'Texto' ? 'selected' : ''}>Texto</option>
+          <option ${tipo === 'Número' ? 'selected' : ''}>Número</option>
+          <option ${tipo === 'Fecha' ? 'selected' : ''}>Fecha</option>
+          <option ${tipo === 'Etiqueta' ? 'selected' : ''}>Etiqueta</option>
+          <option ${tipo === 'Texto Largo' ? 'selected' : ''}>Texto Largo</option>
+        </select>
+      </td>
+      <!-- TEXTAREA CON EVENTO DE AUTO-AJUSTE -->
+      <td><textarea class="schema-textarea" rows="1" placeholder="Comentarios y apuntes...">${descVal}</textarea></td>
+      <td style="text-align:center;"><label class="checkbox-wrapper"><input type="checkbox" ${filChk}></label></td>
+      <td style="text-align:center;"><label class="checkbox-wrapper"><input type="checkbox" ${edChk}></label></td>
+      <td style="text-align:center;">
+        <button class="btn-del-col" onclick="eliminarFilaDiccionario(this)" title="Borrar Columna">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px; height:16px;"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+        </button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+
+  }
+
+  function eliminarFilaDiccionario(btn) {
+    const fila = btn.closest('tr');
+    fila.remove();
+  }
+
+  function toggleVisibility(inputId, groupId) {
+    const input = document.getElementById(inputId);
+    const group = document.getElementById(groupId);
+    const iconHide = document.getElementById('icon_hide_' + inputId); // Ojo tachado
+    const iconShow = document.getElementById('icon_show_' + inputId); // Ojo abierto
+    
+    if(!input || !group || !iconHide || !iconShow) return;
+
+    if (input.type === 'password') {
+      input.type = 'text';
+      group.classList.add('security-visible'); 
+      iconHide.style.display = 'none';         
+      iconShow.style.display = 'inline-block'; 
+    } else {
+      input.type = 'password';
+      group.classList.remove('security-visible');
+      iconHide.style.display = 'inline-block'; 
+      iconShow.style.display = 'none';         
+    }
+  }
+
+  function switchConfigTab(paneId, tabElement) {
+    document.querySelectorAll('.settings-pane').forEach(pane => pane.classList.remove('active'));
+    document.querySelectorAll('.settings-menu-item').forEach(item => item.classList.remove('active'));
+    
+    document.getElementById(paneId).classList.add('active');
+    tabElement.classList.add('active');
+  }
+
+  // ==========================================
+  // LÓGICA DE RESTAURACIÓN DE RESPALDO (NUEVO)
+  // ==========================================
+  function cargarRespaldoJSON(event) {
+    const file = event.target.files[0];
+    if(!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        const cfgRespaldo = JSON.parse(e.target.result);
+        
+        // Rellenar variables visuales
+        document.getElementById('cfg_filas').value          = cfgRespaldo.filas || "";
+        document.getElementById('cfg_limbo').value          = cfgRespaldo.limbo || "";
+        document.getElementById('cfg_sla').value            = cfgRespaldo.sla || "";
+        document.getElementById('cfg_sheetId').value        = cfgRespaldo.sheetId || "";
+        document.getElementById('cfg_sheetName').value      = cfgRespaldo.sheetName || "";
+        document.getElementById('cfg_catalogName').value    = cfgRespaldo.catalogName || "";
+        document.getElementById('cfg_backupFolderId').value = cfgRespaldo.backupFolderId || "";
+        document.getElementById('cfg_admins').value         = cfgRespaldo.admins || "";
+        document.getElementById('cfg_soporte').value        = cfgRespaldo.soporte || "";
+        document.getElementById('cfg_appTitle').value       = cfgRespaldo.appTitle || "";
+        document.getElementById('cfg_appVersion').value     = cfgRespaldo.appVersion || "";
+        document.getElementById('cfg_mod1Title').value      = cfgRespaldo.mod1Title || "";
+        document.getElementById('cfg_mod1Desc').value       = cfgRespaldo.mod1Desc || "";
+        document.getElementById('cfg_mod2Title').value      = cfgRespaldo.mod2Title || "";
+        document.getElementById('cfg_mod2Desc').value       = cfgRespaldo.mod2Desc || "";
+        
+        // Rellenar Diccionario
+        let diccionarioData = [];
+        try { diccionarioData = JSON.parse(cfgRespaldo.diccionario); } catch(err) {}
+        
+        const tbody = document.getElementById('diccionario_body');
+        tbody.innerHTML = ''; 
+        if(diccionarioData.length === 0) agregarFilaDiccionario();
+        else diccionarioData.forEach(col => agregarFilaDiccionario(col));
+
+        showToast("Respaldo cargado en pantalla. Da clic en 'Guardar Configuración' para aplicarlo.", "success");
+      } catch(error) {
+        showToast("Archivo inválido o corrupto.", "error");
+      }
+      event.target.value = ''; // Limpiar input para permitir recargar el mismo archivo
+    };
+    reader.readAsText(file);
+  }
+
+
+
 
 </script>

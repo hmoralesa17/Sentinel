@@ -383,4 +383,124 @@
     white-space: nowrap !important; /* Impide que el texto intente bajar de renglón */
   }
 
+  /* =========================================
+     MESA DE CONTROL (FUSIÓN V4)
+     ========================================= */
+  .settings-layout {
+    display: flex; gap: 0; border: 1px solid #e9ecef;
+    border-radius: 12px; overflow: hidden; min-height: 400px;
+    background: #fff;
+  }
+  .settings-sidebar {
+    width: 240px; background: #f8f9fa; padding: 20px 0;
+    border-right: 1px solid #e9ecef; flex-shrink: 0;
+  }
+  .settings-menu-item {
+    padding: 12px 20px; cursor: pointer; font-size: 13px; font-weight: 700;
+    color: #6b7280; display: flex; align-items: center; gap: 10px;
+    transition: 0.2s; border-left: 3px solid transparent;
+  }
+  .settings-menu-item:hover { color: var(--secondary); background: #f1f3f5; }
+  .settings-menu-item.active {
+    color: var(--primary); background: #fdf4fa; border-left-color: var(--primary);
+  }
+  .settings-pane { flex: 1; padding: 30px 40px; display: none; background: #fff; }
+  .settings-pane.active { display: block; animation: fadeIn 0.3s; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+  .pane-desc {
+    font-size: 14.5px; color: #4b5563; margin-top: 0;
+    margin-bottom: 30px; line-height: 1.5;
+  }
+  
+  .inline-row {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    padding: 20px 0; border-bottom: 1px solid #f1f3f5;
+  }
+  .inline-row:first-of-type { padding-top: 0; }
+  .inline-row:last-child { border-bottom: none; }
+  
+  .inline-label {
+    flex: 1; 
+    font-size: 13.5px; 
+    font-weight: 800; /* Lo subí a 800 para que el morado resalte bien */
+    color: var(--secondary); /* <--- Aquí está la magia (tu color morado) */
+    padding-right: 20px;
+  }
+  .inline-desc {
+    font-size: 11px; color: #9ca3af; margin-top: 6px; font-weight: 400; line-height: 1.4;
+  }
+  
+  .inline-input {
+    width: 300px; padding: 10px 15px; border: 1px solid #ced4da;
+    border-radius: 8px; font-size: 13.5px; background: #fdfdfd; 
+    transition: 0.2s; font-family: inherit;
+  }
+  .inline-input:focus { border-color: var(--primary); outline: none; background: #fff; box-shadow: 0 0 0 3px rgba(212, 0, 153, 0.1); }
+  
+  .inline-textarea {
+    width: 300px; padding: 10px 15px; border: 1px solid #ced4da;
+    border-radius: 8px; font-size: 13.5px; background: #fdfdfd; 
+    transition: 0.2s; font-family: inherit; resize: vertical; min-height: 60px;
+  }
+  .inline-textarea:focus { border-color: var(--primary); outline: none; background: #fff; box-shadow: 0 0 0 3px rgba(212, 0, 153, 0.1); }
+
+  /* Input con ojito integrado */
+  .input-with-icon { position: relative; width: 300px; }
+  .input-with-icon .inline-input { width: 100%; padding-right: 40px; box-sizing: border-box; }
+  .eye-icon { position: absolute; right: 12px; top: 10px; cursor: pointer; color: #9ca3af; transition: 0.2s; }
+  .eye-icon:hover { color: var(--primary); }
+  .security-visible .eye-icon { color: var(--primary); }
+  [class*="security-visible"] .eye-icon { color: var(--primary); }
+
+  /* =========================================
+     DICCIONARIO DE DATOS (TABLA)
+     ========================================= */
+  .schema-table { width: 100%; border-collapse: collapse; margin-top: 10px; border: 1px solid #e9ecef; border-radius: 8px; overflow: hidden; min-width: 800px; }
+  .schema-table th { background: #f8f9fa; color: var(--secondary); font-size: 11px; font-weight: 800; text-transform: uppercase; padding: 12px 10px; text-align: left; border-bottom: 2px solid #e9ecef; }
+  .schema-table td { padding: 8px 10px; border-bottom: 1px solid #f1f3f5; vertical-align: top; }
+  .schema-table tr:hover { background: #fdfdfd; }
+  
+  .schema-input, .schema-select {
+    width: 100%; padding: 8px 10px; border: 1px solid transparent; border-radius: 6px; font-size: 12.5px; background: transparent; transition: 0.2s; font-family: inherit; box-sizing: border-box; color: #333;
+  }
+  .schema-select { cursor: pointer; appearance: none; background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20fill%3D%22%23999%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M7%2010l5%205%205-5z%22%2F%3E%3C%2Fsvg%3E"); background-repeat: no-repeat; background-position: right 8px top 50%; padding-right: 25px; }
+  .schema-input:hover, .schema-select:hover { border-color: #e5e7eb; background: #fff; }
+  .schema-input:focus, .schema-select:focus { border-color: var(--primary); outline: none; background: #fff; box-shadow: 0 0 0 3px rgba(212, 0, 153, 0.1); }
+  .checkbox-wrapper { display: flex; align-items: center; justify-content: center; cursor: pointer; height: 33px; }
+  .checkbox-wrapper input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--primary); cursor: pointer; }
+ 
+  .btn-add-col { background: #f8f9fa; border: 1px dashed #ced4da; color: var(--secondary); font-weight: 700; font-size: 13px; padding: 12px 15px; width: 100%; border-radius: 8px; cursor: pointer; transition: 0.2s; margin-top: 15px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .btn-add-col:hover { background: #fdf4fa; border-color: var(--primary); color: var(--primary); }
+ 
+ .btn-del-col { background: transparent; border: none; color: #ef4444; cursor: pointer; padding: 5px; border-radius: 4px; transition: 0.2s; display: flex; align-items: center; justify-content: center; height: 33px; margin: 0 auto; }
+ .btn-del-col:hover { background: #fee2e2; }
+
+/* Búscalo al final de tu código y déjalo así: */
+  .schema-textarea {
+    width: 100%; 
+    padding: 8px 10px; 
+    border: 1px solid transparent;
+    border-radius: 6px; 
+    font-size: 12px; 
+    background: transparent;
+    transition: 0.2s; 
+    font-family: inherit; 
+    box-sizing: border-box;
+    color: #333; 
+    resize: none; 
+    line-height: 1.4;
+    field-sizing: content; 
+    min-height: 33px; 
+    overflow: hidden; 
+    height: auto !important;
+  }
+  .schema-textarea:hover { border-color: #e5e7eb; background: #fff; }
+  .schema-textarea:focus {
+    border-color: var(--primary); outline: none; background: #fff;
+    box-shadow: 0 0 0 3px rgba(212, 0, 153, 0.1);
+  }
+
+
+
 </style>

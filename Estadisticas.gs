@@ -1,40 +1,29 @@
 /**
- * Módulo de Análisis V1.2
- * Lectura acotada con detección de rezago (ayer y anteriores).
- */
-
-// Variables de control interno (Fáciles de editar)
-var FILAS_A_LEER = 3000;
-var META_SLA_MINUTOS = 30;
-var TOLERANCIA_LIMBO_MINUTOS = 10;
-
-/**
- * Calcula las métricas para los chips del Dashboard.
+ * Módulo de Análisis V4.0 (Versión Final Control Total)
+ * 1. Cuadre absoluto con el Sheet (Folios Hoy).
+ * 2. Detección de rezago de días anteriores (Pendientes/Gestión).
+ * 3. Independencia del BOT (Si el bot no reclama, es Pendiente).
  */
 function obtenerEstadisticasHoy() {
   var ss = SpreadsheetApp.openById(SHEET_ID);
   var sheet = ss.getSheetByName(SHEET_NAME);
-  var lastRow = sheet.getLastRow();
-  if (lastRow < 2) return {};
-
-  // Ventana de lectura para cubrir hoy y rezagos
-  var numRows = Math.min(lastRow - 1, FILAS_A_LEER);
-  var startRow = lastRow - numRows + 1;
   
-  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-  var data = sheet.getRange(startRow, 1, numRows, sheet.getLastColumn()).getDisplayValues();
-  
-  var idxFecha = headers.indexOf("Marca temporal");
-  var idxUSR = headers.indexOf("USR");
-  var idxAtencion = headers.indexOf("Atención");
-  var idxRes = headers.indexOf("Resolución");
-  var idxBot = headers.indexOf("Comentarios Bot");
-  var idxClasif = headers.indexOf("Clasificación");
+  // --- 1. LÍMITES DE LECTURA (BASADO EN CONFIG BOT) ---
+  var endRow = IDX_FILA_ULTIMOFOLIO; 
+  var startRow = IDX_FILA_PRIMER_FOLIO_XDIAS;
 
-  var emailActual = Session.getActiveUser().getEmail().toLowerCase();
-  var usrActual = DICCIONARIO_USUARIOS[emailActual] || "";
+  if (endRow < 2 || startRow < 2) return {};
+
+  var numRows = endRow - startRow + 1;
+  if (numRows < 1) return {};
+
+  var data = sheet.getRange(startRow, 1, numRows, TODAS_LAS_COLUMNAS.length).getValues();
+
+  // --- 2. INICIALIZACIÓN DE VARIABLES ---
+  var META_SLA_MINUTOS = parseFloat(CEREBRO.sla); 
+  var usrActual = DICCIONARIO_USUARIOS[GLOBAL_EMAIL] || "";
   var hoy = new Date();
-  var dHoy = hoy.getDate(), mHoy = hoy.getMonth() + 1, yHoy = hoy.getFullYear();
+  var dHoy = hoy.getDate(), mHoy = hoy.getMonth(), yHoy = hoy.getFullYear();
   
   var stats = {
     foliosHoy: 0, atendidosHoy: 0, pendientesHoy: 0, enGestionHoy: 0,
@@ -51,72 +40,72 @@ function obtenerEstadisticasHoy() {
   var atendidosHumanos = 0, bajoSLA_General = 0, bajoSLA_Mi = 0;
   var tsGlobal = [], tsBot = [], tsMiAtencion = [], tsPendientes = [];
 
+  // --- 3. MOTOR DE PROCESAMIENTO ---
   for (var i = 0; i < data.length; i++) {
     var row = data[i];
-    var fechaRowStr = row[idxFecha];
-    if (!fechaRowStr) continue;
     
-    // Parseo de fecha de la fila
-    var fPartes = fechaRowStr.split(" ")[0].split("/");
-    var dRow = parseInt(fPartes[0]), mRow = parseInt(fPartes[1]), yRow = parseInt(fPartes[2]);
-    var esDeHoy = (dRow === dHoy && mRow === mHoy && yRow === yHoy);
+    var valMarca = (IDX_MARCA > -1) ? row[IDX_MARCA] : null;
+    if (!valMarca || valMarca === "") continue;
 
-    // Objeto de tiempo para comparaciones y chips
-    var tObj = new Date(yRow, mRow - 1, dRow);
-    if (fechaRowStr.split(" ")[1]) {
-      var hP = fechaRowStr.split(" ")[1].split(":");
-      tObj.setHours(parseInt(hP[0]), parseInt(hP[1]), parseInt(hP[2] || 0));
+    var tObj = (valMarca instanceof Date) ? valMarca : new Date(valMarca);
+    if (isNaN(tObj.getTime())) continue; 
+
+    var esDeHoy = (tObj.getDate() === dHoy && tObj.getMonth() === mHoy && tObj.getFullYear() === yHoy);
+
+    var usrCode = (IDX_USR > -1 && row[IDX_USR]) ? row[IDX_USR].toString().trim() : "";
+    var tieneUSR = usrCode !== "";
+    var tieneAtencion = (IDX_ATENCION > -1 && row[IDX_ATENCION]) ? row[IDX_ATENCION].toString().trim() !== "" : false;
+    var tieneClasificacion = (IDX_CLASIF > -1 && row[IDX_CLASIF]) ? row[IDX_CLASIF].toString().trim() !== "" : false;
+    var esBot = usrCode.toUpperCase() === "BOT";
+    
+    var valResolucion = (IDX_SLA > -1) ? row[IDX_SLA] : 0;
+    var resMinutos = normalizarResolucionAMinutos(valResolucion);
+
+    // A. Conteo Total (Solo Hoy)
+    if (esDeHoy) {
+      stats.foliosHoy++; 
+      tsGlobal.push(tObj);
     }
 
-    var usrCode = row[idxUSR] ? row[idxUSR].toString().trim() : "";
-    var tieneUSR = usrCode !== "";
-    var tieneAtencion = row[idxAtencion] ? row[idxAtencion].toString().trim() !== "" : false;
-    var tieneClasificacion = idxClasif > -1 && row[idxClasif] ? row[idxClasif].toString().trim() !== "" : false;
-    var esBot = usrCode.toUpperCase() === "BOT";
-    var resMinutos = normalizarResolucionAMinutos(row[idxRes]);
+    // B. Lógica de Estados (Pendientes y Gestión - Incluye Rezago)
+    var estaTerminado = (tieneUSR && tieneAtencion && tieneClasificacion);
 
-    // --- 1. LÓGICA DE PRODUCTIVIDAD (SÓLO HOY) ---
-    if (esDeHoy) {
-      stats.foliosHoy++;
-      tsGlobal.push(tObj);
+    if (!estaTerminado) {
+      if (tieneUSR && !tieneAtencion) {
+        stats.enGestionHoy++;
+      } else if (!tieneUSR) {
+        stats.pendientesHoy++; // Si no tiene USR, es pendiente (Bot caído o folio nuevo)
+      }
+      tsPendientes.push(tObj); 
+    }
+
+    // C. Productividad (Solo lo finalizado hoy)
+    if (estaTerminado && esDeHoy) {
+      stats.atendidosHoy++;
 
       if (esBot) {
         stats.atendidosBot++;
         sumaResBot += resMinutos;
         tsBot.push(tObj);
-      }
+      } else {
+        atendidosHumanos++;
+        sumaResHumano += resMinutos;
+        if (resMinutos > maxResTotal) maxResTotal = resMinutos;
+        if (resMinutos <= META_SLA_MINUTOS) bajoSLA_General++; 
 
-      if (tieneUSR && tieneAtencion && tieneClasificacion) {
-        stats.atendidosHoy++;
-        if (!esBot) {
-          atendidosHumanos++;
-          sumaResHumano += resMinutos;
-          if (resMinutos > maxResTotal) maxResTotal = resMinutos;
-          if (resMinutos <= META_SLA_MINUTOS) bajoSLA_General++; // Parametrizado
-
-          if (usrCode === usrActual) {
-            stats.miAtendidos++;
-            sumaResMi += resMinutos;
-            if (resMinutos < minResMi) minResMi = resMinutos;
-            if (resMinutos > maxResMi) maxResMi = resMinutos;
-            if (resMinutos <= META_SLA_MINUTOS) bajoSLA_Mi++; // Parametrizado
-            tsMiAtencion.push(tObj);
-          }
+        if (usrCode === usrActual) {
+          stats.miAtendidos++;
+          sumaResMi += resMinutos;
+          if (resMinutos < minResMi) minResMi = resMinutos;
+          if (resMinutos > maxResMi) maxResMi = resMinutos;
+          if (resMinutos <= META_SLA_MINUTOS) bajoSLA_Mi++; 
+          tsMiAtencion.push(tObj);
         }
       }
     }
+  } 
 
-    // --- 2. LÓGICA DE PENDIENTES Y REZAGO (TODA LA VENTANA) ---
-    if (row[idxBot] !== "" && row[idxBot] !== "0") {
-      if (!tieneAtencion || !tieneUSR || !tieneClasificacion) {
-        if (tieneUSR && !tieneAtencion) stats.enGestionHoy++;
-        if (!tieneUSR && !tieneAtencion) stats.pendientesHoy++;
-        tsPendientes.push(tObj);
-      }
-    }
-  }
-  
-  // --- PROCESAMIENTO FINAL ---
+  // --- 4. CÁLCULOS FINALES ---
   if (atendidosHumanos > 0) {
     stats.promedioAtencion = formatearTiempo(sumaResHumano / atendidosHumanos);
     stats.maxAtencion = formatearTiempo(maxResTotal);
@@ -139,7 +128,7 @@ function obtenerEstadisticasHoy() {
     stats.promedioBot = formatearTiempo(sumaResBot / stats.atendidosBot);
   }
   
-  const fmtH = (d) => Utilities.formatDate(d, Session.getScriptTimeZone(), "HH:mm:ss");
+  const fmtH = function(d) { return Utilities.formatDate(d, GLOBAL_TIMEZONE, "HH:mm:ss"); };
   
   if (tsGlobal.length > 0) {
     stats.primerCaso = fmtH(new Date(Math.min.apply(null, tsGlobal)));
@@ -154,14 +143,12 @@ function obtenerEstadisticasHoy() {
     stats.miUltimoAtn = fmtH(new Date(Math.max.apply(null, tsMiAtencion)));
   }
 
-  // Chip "+ Viejo" (Con día/mes si es rezago)
   if (tsPendientes.length > 0) {
     var masViejo = new Date(Math.min.apply(null, tsPendientes));
-    if (masViejo.getDate() !== hoy.getDate()) {
-       stats.viejoPendiente = Utilities.formatDate(masViejo, Session.getScriptTimeZone(), "dd/MM HH:mm");
-    } else {
-       stats.viejoPendiente = fmtH(masViejo);
-    }
+    var textoViejo = (masViejo.getDate() !== hoy.getDate()) 
+                     ? Utilities.formatDate(masViejo, GLOBAL_TIMEZONE, "dd/MM HH:mm")
+                     : fmtH(masViejo);
+    stats.viejoPendiente = textoViejo;
   }
 
   return stats;

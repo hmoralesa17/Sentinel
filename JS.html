@@ -1,15 +1,109 @@
 <script>
-/**
-   * Módulo Logica de Interfaz V1.2
-   * Controladores de eventos y lógica de toma de casos protegida.
+  /**
+   * Módulo Logica de Interfaz V3.3 (FUSIÓN COMPLETA Y OPTIMIZADA)
+   * Integración de funciones nativas + Fila Fantasma + Choices.js + Diccionario
+   * Textos fijos eliminados y títulos mapeados a CEREBRO/Diccionario.
    */
+
+  // ==========================================
+  // VARIABLES DE ESTADO GLOBALES
+  // ==========================================
   let historialActual = [];
   let versionGlobalApp = "15";
-  const COL_TABLA = ["FOLIO", "Marca temporal", "CURP", "Cuenta", "Tipo de Identificación", "Tipo Cliente", "Tipo Caso", "Servicio", "Tienda", "Dirección de correo electrónico"];
-  const MAP_LABELS = { "Marca temporal": "FECHA FOLIO", "Tipo de Identificación": "TIPO ID", "Dirección de correo electrónico": "Correo del Folio", "Repetido": "Repetido", "Comentarios Bot": "Comentarios Bot" };
   let catalogo = [], casoParaConfirmar = null, casoActual = null, casosCargados = [];
-  let configYaCargada = false; // Bandera para saber si ya descargamos la Mesa de Control
+  let configYaCargada = false; 
 
+  // Paginación Explorador
+  let datosExploradorMemoria = [];
+  let paginaActualExplorador = 1;
+  const REGISTROS_POR_PAGINA = 100;
+
+  // Selectores Múltiples (Choices.js)
+  let choiceTipoId, choiceTipoCaso, choiceClasif;
+
+  // ==========================================
+  // INICIALIZACIÓN DEL SISTEMA
+  // ==========================================
+  window.onload = function() { 
+    cargarInfoUsuario(); 
+    cargarCatalogo(); 
+    cargarVersion(); 
+    validarPermisos(); 
+    cargarCatalogosExplorador();
+  };
+
+  function runGAS(f, s, ...a) {
+    if (typeof google !== 'undefined') {
+      google.script.run.withSuccessHandler(s).withFailureHandler(e => {
+        document.getElementById('loading').style.display = 'none';
+        showToast("<?= CEREBRO.msgErrorServidor || 'Error: ' ?>" + e.message, "error");
+      })[f](...a);
+    }
+  }
+
+  // ==========================================
+  // CARGA DE DATOS ESTÁTICOS
+  // ==========================================
+  function cargarVersion() {
+    runGAS('obtenerVersionFormateada', v => {
+      const el = document.getElementById('txtVersionApp');
+      if (el) el.innerHTML = `<span class="texto-version-largo"><?= CEREBRO.lblVersionPrefix || 'Sentinel Gestor Fraudes RI-FI ' ?></span>${v}`;
+    });
+  }
+
+  function cargarInfoUsuario() {
+    runGAS('obtenerInfoUsuario', info => {
+      document.getElementById('userName').textContent = info.nombreCompleto || '<?= CEREBRO.lblEspecialista || "Especialista" ?>';
+      document.getElementById('userIdUsr').textContent = info.vpl_usr || '---';
+      document.getElementById('userNoEmp').textContent = info.noEmpleado || 'S/N';
+    });
+  }
+
+  function validarPermisos() {
+    runGAS('verificarSiEsAdmin', isAdmin => {
+      if (isAdmin) {
+        const btnMenu = document.getElementById('menuConfig');
+        if (btnMenu) btnMenu.style.display = 'flex';
+        const cardHome = document.getElementById('cardConfigHome');
+        if (cardHome) cardHome.style.display = 'block';
+      }
+    });
+  }
+
+  // ==========================================
+  // ESTADÍSTICAS (SOPORTE CHIPS V1 Y V2)
+  // ==========================================
+  function actualizarStats() {
+    runGAS('obtenerEstadisticasHoy', stats => {
+      // Mapeo seguro: actualiza el ID solo si existe en el HTML
+      const domMap = {
+        'stAtendidosBot': stats.atendidosBot, 'stPromBot': stats.promedioBot, 'stUltimoBot': stats.ultimoBot,
+        'stFoliosHoy': stats.foliosHoy, 'stAtendidosHoy': stats.atendidosHoy, 'stPendientes': stats.pendientesHoy,
+        'stEnGestion': stats.enGestionHoy, 'stPromHumano': stats.promedioAtencion, 'stPromTotal': stats.promedioTotal,
+        'stMaxTotal': stats.maxAtencion, 'stUltimo': stats.ultimoCaso, 'stViejoPendiente': stats.viejoPendiente,
+        'stSLA': stats.cumplimientoSLA, 'stMiAtendidosVal': stats.miAtendidos, 'stMiPromedioVal': stats.miPromedio,
+        'stMiMax': stats.miMax, 'stMiMin': stats.miMin, 'stMiSLA': stats.miSLA, 'stMiPrimeraAtn': stats.miPrimerAtn,
+        'stMiUltimaAtn': stats.miUltimoAtn, 
+        
+        // Soporte a los Nuevos Chips V2 (Si decides usarlos)
+        'stPromEspera': stats.promedioEspera, 'stMaxEspera': stats.maxEspera, 'stPromGestion': stats.promedioGestion,
+        'stMaxGestion': stats.maxGestion, 'stMinGestion': stats.minGestion, 'stLimbo': stats.limboDetectado
+      };
+
+      for (let id in domMap) {
+        const el = document.getElementById(id);
+        if(el) el.textContent = domMap[id] !== undefined ? domMap[id] : '---';
+      }
+
+      const ahora = new Date();
+      const lastSync = document.getElementById('stLastSync');
+      if(lastSync) lastSync.textContent = ahora.getHours() + ":" + (ahora.getMinutes() < 10 ? '0' : '') + ahora.getMinutes();
+    });
+  }
+
+  // ==========================================
+  // COMPORTAMIENTO UI (MENÚS Y COLAPSABLES)
+  // ==========================================
   function toggleSection(id) {
     const el = document.getElementById(id);
     const icon = el.querySelector('.toggle-icon');
@@ -21,95 +115,12 @@
     const container = document.getElementById('infoGeneralContainer');
     const btn = container.querySelector('.toggle-info-btn');
     container.classList.toggle('collapsed');
-    btn.textContent = container.classList.contains('collapsed') ? "VER DETALLES ▼" : "OCULTAR DETALLES ▲";
+    btn.textContent = container.classList.contains('collapsed') ? "<?= CEREBRO.lblVerDetalles || 'VER DETALLES' ?> ▼" : "<?= CEREBRO.lblOcultarDetalles || 'OCULTAR DETALLES' ?> ▲";
   }
 
-  // Lógica para abrir/cerrar la Barra Lateral Flotante
   function toggleSidebar() {
     const sidebar = document.getElementById('sidebar');
-    if(sidebar) {
-      sidebar.classList.toggle('active');
-    }
-  }
-
-  function runGAS(f, s, ...a) {
-    if (typeof google !== 'undefined') {
-      google.script.run.withSuccessHandler(s).withFailureHandler(e => {
-        document.getElementById('loading').style.display = 'none';
-        showToast("Error: " + e.message, "error");
-      })[f](...a);
-    }
-  }
-
-  // Al arrancar, solo cargamos datos estáticos y ligeros (1 sola vez)
-  window.onload = function() { 
-    cargarInfoUsuario(); 
-    cargarCatalogo(); 
-    cargarVersion(); 
-    validarPermisos(); 
-    cargarCatalogosExplorador();
-  };
-
-  function cargarVersion() {
-    runGAS('obtenerVersionFormateada', v => {
-      const el = document.getElementById('txtVersionApp');
-      if (el) {
-        // Separa el texto para que el CSS pueda ocultar la primera parte
-        el.innerHTML = `<span class="texto-version-largo">Sentinel Gestor Fraudes RI-FI </span>${v}`;
-      }
-    });
-  }
-
-  function cargarInfoUsuario() {
-    runGAS('obtenerInfoUsuario', info => {
-      document.getElementById('userName').textContent = info.nombreCompleto || 'Especialista';
-      document.getElementById('userIdUsr').textContent = info.vpl_usr || '---';
-      document.getElementById('userNoEmp').textContent = info.noEmpleado || 'S/N';
-    });
-  }
-
-  // ==========================================
-  // VALIDACIÓN DE PERMISOS (ADMIN)
-  // ==========================================
-  function validarPermisos() {
-    runGAS('verificarSiEsAdmin', isAdmin => {
-      if (isAdmin) {
-        // Enciende el botón del menú lateral
-        const btnMenu = document.getElementById('menuConfig');
-        if (btnMenu) btnMenu.style.display = 'flex';
-        
-        // Enciende la tarjeta gigante del Home
-        const cardHome = document.getElementById('cardConfigHome');
-        if (cardHome) cardHome.style.display = 'block';
-      }
-    });
-  }
-
-  function actualizarStats() {
-    runGAS('obtenerEstadisticasHoy', stats => {
-      document.getElementById('stAtendidosBot').textContent = stats.atendidosBot;
-      document.getElementById('stPromBot').textContent = stats.promedioBot;
-      document.getElementById('stUltimoBot').textContent = stats.ultimoBot;
-      document.getElementById('stFoliosHoy').textContent = stats.foliosHoy;
-      document.getElementById('stAtendidosHoy').textContent = stats.atendidosHoy;
-      document.getElementById('stPendientes').textContent = stats.pendientesHoy;
-      document.getElementById('stEnGestion').textContent = stats.enGestionHoy;
-      document.getElementById('stPromHumano').textContent = stats.promedioAtencion;
-      document.getElementById('stPromTotal').textContent = stats.promedioTotal;
-      document.getElementById('stMaxTotal').textContent = stats.maxAtencion;
-      document.getElementById('stUltimo').textContent = stats.ultimoCaso;
-      document.getElementById('stViejoPendiente').textContent = stats.viejoPendiente;
-      document.getElementById('stSLA').textContent = stats.cumplimientoSLA;
-      document.getElementById('stMiAtendidosVal').textContent = stats.miAtendidos;
-      document.getElementById('stMiPromedioVal').textContent = stats.miPromedio;
-      document.getElementById('stMiMax').textContent = stats.miMax;
-      document.getElementById('stMiMin').textContent = stats.miMin;
-      document.getElementById('stMiSLA').textContent = stats.miSLA;
-      document.getElementById('stMiPrimeraAtn').textContent = stats.miPrimerAtn;
-      document.getElementById('stMiUltimaAtn').textContent = stats.miUltimoAtn;
-      const ahora = new Date();
-      document.getElementById('stLastSync').textContent = ahora.getHours() + ":" + (ahora.getMinutes() < 10 ? '0' : '') + ahora.getMinutes();
-    });
+    if(sidebar) sidebar.classList.toggle('active');
   }
 
   function showToast(m, t) {
@@ -124,41 +135,64 @@
     b.classList.add('active'); document.getElementById(i).classList.add('active');
   }
 
+  function mostrarError(mensaje) { 
+    document.getElementById('mensajeError').textContent = mensaje; 
+    document.getElementById('modalError').style.display = 'flex'; 
+  }
+  
+  function cerrarError() { document.getElementById('modalError').style.display = 'none'; }
+  function cerrarModalNote() { document.getElementById('modalNote').style.display = 'none'; }
+
+  // ==========================================
+  // MESA DE TRABAJO (PENDIENTES Y DICCIONARIO)
+  // ==========================================
   function cargarCasos() {
-    document.getElementById('loadingText').textContent = "Buscando casos...";
+    document.getElementById('loadingText').textContent = "<?= CEREBRO.msgBuscandoCasos || 'Buscando casos...' ?>";
     document.getElementById('loading').style.display = 'flex';
     actualizarStats();
-    runGAS('obtenerCasosDinamicos', res => { casosCargados = res; renderTabla(res); document.getElementById('loading').style.display = 'none'; });
+    runGAS('obtenerCasosDinamicos', res => { 
+      casosCargados = res; 
+      renderTabla(res); 
+      document.getElementById('loading').style.display = 'none'; 
+    });
   }
 
   function renderTabla(c) {
     const t = document.getElementById('tablaContenedor');
     if (!c || c.length === 0) { 
-      t.innerHTML = '<div style="text-align:center;padding:40px;color:#999;font-size:16px;">Sin registros hoy.</div>'; 
+      const msgVacio = `<?= CEREBRO.msgNoFolios || 'No hay folios pendientes por atender.' ?>`;
+      t.innerHTML = `<div style="text-align:center;padding:40px;color:#999;font-size:16px;font-weight:600;">${msgVacio}</div>`; 
       return; 
     }
+
+    const diccStr = `<?!= CEREBRO.diccionario ? CEREBRO.diccionario : '[]' ?>`;
+    let diccionario = [];
+    try { diccionario = JSON.parse(diccStr); } catch(e) {}
     
     let h = '<table><thead><tr>';
-    COL_TABLA.forEach(x => {
-      let thClass = (x === 'FOLIO') ? ' class="col-folio"' : (x === 'Marca temporal') ? ' class="col-fecha"' : (x === 'CURP') ? ' class="col-curp"' : (x === 'Cuenta') ? ' class="col-cuenta"' : (x === 'Tipo de Identificación') ? ' class="col-tipo-id"' : (x === 'Tipo Cliente') ? ' class="col-tipo-cliente"' : (x === 'Tipo Caso') ? ' class="col-tipo-caso"' : (x === 'Servicio') ? ' class="col-servicio"' : (x === 'Tienda') ? ' class="col-tienda"' : (x === 'Dirección de correo electrónico') ? ' class="col-correo"' : '';
-      h += `<th${thClass}>${MAP_LABELS[x] || x}</th>`;
+    
+    diccionario.forEach(col => {
+      if(col.visual !== "Oculto") {
+        h += `<th>${col.visual || col.bd}</th>`;
+      }
     });
-    h += '<th class="col-accion">Acción</th></tr></thead><tbody>';
+    h += `<th class="col-accion"><?= CEREBRO.lblAccion || 'Acción' ?></th></tr></thead><tbody>`;
     
     c.forEach((x, index) => {
       const trClass = x.esLimbo ? ' class="row-limbo"' : '';
-      h += `<tr${trClass}>`;
+      h += `<tr id="fila-caso-${x.numeroFila}"${trClass}>`;
       
-      COL_TABLA.forEach(col => {
-        let tdClass = (col === 'FOLIO') ? ' class="col-folio"' : (col === 'Marca temporal') ? ' class="col-fecha"' : (col === 'CURP') ? ' class="col-curp"' : (col === 'Cuenta') ? ' class="col-cuenta"' : (col === 'Tipo de Identificación') ? ' class="col-tipo-id"' : (col === 'Tipo Cliente') ? ' class="col-tipo-cliente"' : (col === 'Tipo Caso') ? ' class="col-tipo-caso"' : (col === 'Servicio') ? ' class="col-servicio"' : (col === 'Tienda') ? ' class="col-tienda"' : (col === 'Dirección de correo electrónico') ? ' class="col-correo"' : '';
-        let val = x.datos[col] || '-';
-        if (x.esLimbo && col === 'FOLIO') {
-          val += `<span class="badge-limbo">RES- ${x.usuarioOriginal}</span>`;
+      diccionario.forEach(col => {
+        if(col.visual !== "Oculto") {
+          let val = x.datos[col.bd] || '-';
+          if (x.esLimbo && col.bd === 'FOLIO') {
+            val += `<span class="badge-limbo">RES- ${x.usuarioOriginal}</span>`;
+          }
+          h += `<td>${val}</td>`;
         }
-        h += `<td${tdClass}>${val}</td>`;
       });
       
-      const btnLabel = x.esLimbo ? "Rescatar" : "Atender";
+      const btnLabel = x.esLimbo ? "<?= CEREBRO.lblRescatar || 'Rescatar' ?>" : "<?= CEREBRO.lblAtender || 'Atender' ?>";
       h += `<td class="col-accion"><button class="btn" style="padding: 7px 14px; font-size:13px;" onclick="previaConfirmacion(${index})">${btnLabel}</button></td></tr>`;
     });
     t.innerHTML = h + '</tbody></table>';
@@ -171,16 +205,12 @@
 
   function cerrarConfirmToma() { document.getElementById('modalConfirmToma').style.display = 'none'; }
 
-  /**
-   * ACTUALIZADO: Pasa la bandera de rescate al servidor para prevenir sobreescrituras
-   */
   function ejecutarTomaDeCaso() {
     const c = casoParaConfirmar; 
     cerrarConfirmToma();
-    document.getElementById('loadingText').textContent = "Bloqueando folio...";
+    document.getElementById('loadingText').textContent = "<?= CEREBRO.msgBloqueandoFolio || 'Bloqueando folio...' ?>";
     document.getElementById('loading').style.display = 'flex';
 
-    // Enviamos c.esLimbo como segundo parámetro (esRescate)
     runGAS('tomarCasoDinamico', res => {
       if (res.exito) {
         casoActual = c; 
@@ -190,84 +220,24 @@
           renderHistorial(h);
         }, c.datos.CURP, c.datos.Cuenta);
       } else { 
+        // ✨ FILA FANTASMA (ELIMINACIÓN SIN RECARGAR) ✨
         document.getElementById('loading').style.display = 'none'; 
-        mostrarError(res.mensaje); 
-        cargarCasos(); 
+        showToast(res.mensaje, "error"); // Usamos directo el mensaje oficial del servidor MSG_COLISION
+        
+        const filaPerdida = document.getElementById("fila-caso-" + c.numeroFila);
+        if (filaPerdida) {
+          filaPerdida.classList.add('fila-fantasma-out');
+          setTimeout(() => filaPerdida.remove(), 400);
+        } else {
+          cargarCasos();
+        }
       }
     }, c.numeroFila, c.esLimbo); 
   }
 
-  function renderHistorial(h) {
-    const b = document.getElementById('tablaHistorial');
-    if (!b) return;
-
-    if (!h || h.length === 0) { 
-        b.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:20px;color:#999;">Sin historial previo para este cliente.</td></tr>'; 
-        return; 
-    }
-    
-    const parseDate = (str) => {
-      if (!str) return new Date(0);
-      const [dPart, hPart] = str.split(' ');
-      if (!dPart) return new Date(0);
-      const parts = dPart.split('/');
-      if (parts.length < 3) return new Date(0);
-      
-      const d = parseInt(parts[0], 10);
-      const m = parseInt(parts[1], 10);
-      const y = parseInt(parts[2], 10);
-      
-      let hh = 0, mm = 0, ss = 0;
-      if (hPart) {
-          const hParts = hPart.split(':');
-          hh = parseInt(hParts[0], 10) || 0;
-          mm = parseInt(hParts[1], 10) || 0;
-          ss = parseInt(hParts[2], 10) || 0;
-      }
-      return new Date(y, m - 1, d, hh, mm, ss);
-    };
-    
-    h.sort((a, b) => {
-        const d1 = parseDate(a.fecha);
-        const d2 = parseDate(b.fecha);
-        return d1 - d2;
-    });
-    
-    historialActual = h;
-
-    let r = '';
-    h.forEach((x, idx) => {
-      r += `<tr style="border-bottom:1px solid #f1f3f5;">
-              <td class="hist-fecha">${x.fecha || '-'}</td>
-              <td class="hist-folio">${x.folio || '-'}</td>
-              <td class="hist-curp">${x.curp || '-'}</td>
-              <td class="hist-cuenta">${x.cuenta || '-'}</td>
-              <td class="hist-atencion">${x.atencion || '-'}</td>
-              <td class="hist-usr">${x.usr || '-'}</td>
-              <td class="hist-clasif"><b style="color:var(--primary)">${x.clasificacion || '-'}</b></td>
-              <td class="hist-notas clickable-data" onclick="mostrarModalDetalleHist(${idx})" title="Clic para ver completo">${x.indicaciones || '-'}</td>
-            </tr>`;
-    });
-    b.innerHTML = r;
-  }
-
-  function mostrarModalDetalleHist(idx) {
-    const data = historialActual[idx];
-    document.getElementById('modalNoteTitle').textContent = 'Notas de Gestión';
-    document.getElementById('fullNoteText').textContent = data.indicaciones;
-    document.getElementById('modalNote').style.display = 'flex';
-  }
-
-  function mostrarModalDetalleBot() {
-    document.getElementById('modalNoteTitle').textContent = 'Comentarios del Bot';
-    document.getElementById('fullNoteText').textContent = casoActual.datos["Comentarios Bot"];
-    document.getElementById('modalNote').style.display = 'flex';
-  }
-
-  function cerrarModalNote() { document.getElementById('modalNote').style.display = 'none'; }
-  function mostrarError(mensaje) { document.getElementById('mensajeError').textContent = mensaje; document.getElementById('modalError').style.display = 'flex'; }
-  function cerrarError() { document.getElementById('modalError').style.display = 'none'; }
-
+  // ==========================================
+  // PANTALLA DE ATENCIÓN (FORMULARIO Y TABS)
+  // ==========================================
   function mostrarPantallaAtencion() {
     const loading = document.getElementById('loading');
     const viewL = document.getElementById('viewLista');
@@ -279,63 +249,37 @@
     if(viewA) viewA.className = 'view active';
     
     if(tituloGlobal && casoActual) {
-      tituloGlobal.innerHTML = 'Atención Folio: <span style="color: var(--primary);">' + (casoActual.datos.FOLIO || 'S/N') + '</span>';
+      tituloGlobal.innerHTML = `<?= CEREBRO.lblAtencionFolio || 'Atención Folio:' ?> <span style="color: var(--primary);">${casoActual.datos.FOLIO || 'S/N'}</span>`;
     }
     
     const infoContainer = document.getElementById('infoGeneral');
     if(!infoContainer) return;
-    
     infoContainer.innerHTML = '';
 
     const tablaHist = document.getElementById('tablaHistorial');
-    if(tablaHist) tablaHist.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:30px; color:#999; font-style:italic;">⏳ Buscando antecedentes del cliente...</td></tr>';
+    if(tablaHist) tablaHist.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:30px; color:#999; font-style:italic;"><?= CEREBRO.msgBuscandoAntecedentes || '⏳ Buscando antecedentes del cliente...' ?></td></tr>`;
     
-    const allFields = [
-      { k: "Marca temporal", label: "FECHA FOLIO", mode: "full", cls: "item-fecha", secondary: false },
-      { k: "CURP", label: "CURP", mode: "full", cls: "item-curp", secondary: false },
-      { k: "Cuenta", label: "CUENTA", mode: "full", cls: "item-cuenta", secondary: false },
-      { k: "Tipo de Identificación", label: "TIPO ID", mode: "truncate", cls: "item-tipo-id", secondary: false },
-      { k: "Tipo Cliente", label: "TIPO CLIENTE", mode: "truncate", cls: "item-tipo-cliente", secondary: false },
-      { k: "Tienda", label: "TIENDA", mode: "truncate", cls: "item-tienda", secondary: false },
-      { k: "Dirección de correo electrónico", label: "CORREO", mode: "full", cls: "item-correo", secondary: true },
-      { k: "Repetido", label: "¿Subido Antes?", mode: "check", cls: "item-check", secondary: true },
-      { k: "Tipo Caso", label: "TIPO CASO", mode: "wrap", cls: "item-tipo-caso", secondary: true },
-      { k: "Servicio", label: "SERVICIO", mode: "wrap", cls: "item-servicio", secondary: true },
-      { k: "Comentarios Bot", label: "COMENTARIOS BOT", mode: "truncate", cls: "item-comentarios", secondary: true }
-    ];
+    const diccStr = `<?!= CEREBRO.diccionario ? CEREBRO.diccionario : '[]' ?>`;
+    let diccionario = [];
+    try { diccionario = JSON.parse(diccStr); } catch(e) {}
 
     let rowHtml = '<div class="data-row">';
-    
-    allFields.forEach(cfg => {
-      try {
-        let label = cfg.label;
-        let valBruto = (casoActual && casoActual.datos) ? casoActual.datos[cfg.k] : '';
-        let val = valBruto ? String(valBruto).trim() : '';
-        if (!val) val = '-';
-        
-        if (cfg.mode === "check") {
-          val = (val !== "-" && val !== "0" && String(val).toUpperCase() !== "NO") ? "SI" : "NO";
-        }
-        
-        let cssClass = 'data-item ' + (cfg.cls || '');
-        if (cfg.secondary) cssClass += ' secondary-info';
-        if (cfg.mode === 'wrap' || cfg.mode === 'full' || cfg.mode === 'check') cssClass += ' no-truncate';
-        
-        let onclickAttr = '';
-        if (cfg.k === "Comentarios Bot") {
-          cssClass += ' clickable-data';
-          onclickAttr = `onclick="mostrarModalDetalleBot()"`;
-        }
-        
-        const titleAttr = (cfg.mode === 'truncate') ? `title="${String(val).replace(/"/g, '&quot;')}"` : '';
-        rowHtml += `<div class="${cssClass}" ${titleAttr} ${onclickAttr}><span class="data-label">${label}</span> ${val}</div>`;
-        
-      } catch(e) {
-        console.error("Error al pintar el campo: " + cfg.label, e);
+    diccionario.forEach(col => {
+      let val = casoActual.datos[col.bd];
+      if (val === undefined || val === null || String(val).trim() === '') val = '-';
+      
+      let cssClass = 'data-item';
+      if (col.tipo === 'Texto Largo' || col.tipo === 'Etiqueta') cssClass += ' no-truncate';
+      
+      let onclickAttr = '';
+      if (col.bd === "Comentarios Bot") {
+        cssClass += ' clickable-data';
+        onclickAttr = `onclick="mostrarModalDetalleBot()"`;
       }
+      
+      rowHtml += `<div class="${cssClass}" ${onclickAttr}><span class="data-label">${col.visual || col.bd}</span> ${val}</div>`;
     });
     rowHtml += '</div>';
-    
     infoContainer.innerHTML = rowHtml;
     
     const selC = document.getElementById('selectClasificacion');
@@ -343,6 +287,9 @@
     if(selC) selC.value = ""; 
     if(txtI) txtI.value = "";
     
+    if(casoActual.datos.Clasificación && selC) selC.value = casoActual.datos.Clasificación;
+    if(casoActual.datos.Indicaciones && txtI) txtI.value = casoActual.datos.Indicaciones;
+
     const btnHist = document.getElementById('btnTabHistorico');
     if(btnHist) switchTab(btnHist, 'tabHistorico');
   }
@@ -350,6 +297,7 @@
   function cargarCatalogo() {
     runGAS('obtenerCatalogoNotas', r => {
       const s = document.getElementById('selectClasificacion');
+      if(!s) return;
       r.forEach(x => { const o = document.createElement('option'); o.value = x.clasificacion; o.textContent = x.clasificacion; s.appendChild(o); });
       catalogo = r;
     });
@@ -361,32 +309,12 @@
     document.getElementById('textIndicaciones').value = x ? x.indicacion : "";
   }
 
-  function cancelarAtencion() {
-    const loadingText = document.getElementById('loadingText');
-    const loading = document.getElementById('loading');
-    const viewA = document.getElementById('viewAtencion');
-    const viewL = document.getElementById('viewLista');
-    const tituloGlobal = document.getElementById('mainTitle');
-    
-    if(!casoActual) return;
-
-    if(loadingText) loadingText.textContent = "Desbloqueando folio...";
-    if(loading) loading.style.display = 'flex';
-    
-    runGAS('liberarCasoDinamico', () => {
-        casoActual = null;
-        if(loading) loading.style.display = 'none';
-        if(viewA) viewA.classList.remove('active');
-        if(viewL) viewL.classList.add('active'); 
-        
-        if(tituloGlobal) tituloGlobal.innerHTML = 'Atención Folios Biométricos <span id="displayFolio" style="display:none;"></span>';
-        
-        cargarCasos();
-    }, casoActual.numeroFila);
-  }
-
   function abrirConfirmacionFinal() {
-    if (!document.getElementById('selectClasificacion').value || !document.getElementById('textIndicaciones').value.trim()) { showToast("Selecciona clasificación y nota.", "error"); return; }
+    if (!document.getElementById('selectClasificacion').value) { 
+      const msg = `<?= CEREBRO.msgClasifRequerida || '⚠️ Debes seleccionar una clasificación.' ?>`;
+      showToast(msg, "error"); 
+      return; 
+    }
     document.getElementById('modalConfirmFinal').style.display = 'flex';
   }
 
@@ -404,35 +332,122 @@
     if (!casoActual || !s || !t) return;
 
     if(loading) loading.style.display = 'flex';
-    if(loadingText) loadingText.textContent = "Guardando atención oficial...";
+    if(loadingText) loadingText.textContent = "<?= CEREBRO.msgGuardandoAtencion || 'Guardando atención oficial...' ?>";
     
     runGAS('finalizarCasoDinamico', r => {
       if(loading) loading.style.display = 'none';
       
       if (r && r.exito) { 
         casoActual = null;
-        showToast("¡Gestión finalizada!", "success"); 
+        const msg = `<?= CEREBRO.msgExitoGestion || '✅ Folio gestionado correctamente.' ?>`;
+        showToast(msg, "success"); 
         
         const vA = document.getElementById('viewAtencion');
         const vL = document.getElementById('viewLista');
         if(vA) vA.classList.remove('active'); 
         if(vL) vL.classList.add('active'); 
         
-        if(tituloGlobal) tituloGlobal.innerHTML = 'Atención Folios Biométricos <span id="displayFolio" style="display:none;"></span>';
+        if(tituloGlobal) tituloGlobal.innerHTML = `<?= CEREBRO.mod1Title || 'Atención Folios' ?> <span id="displayFolio" style="display:none;"></span>`;
         
         cargarCasos(); 
       } else {
-        mostrarError(r ? r.mensaje : "Error desconocido");
+        mostrarError(r ? r.mensaje : "<?= CEREBRO.msgErrorDesconocido || 'Error desconocido' ?>");
       }
     }, casoActual.numeroFila, s.value, t.value);
   }
 
-// ==========================================
-// CONTROLADOR CENTRAL DE NAVEGACIÓN
-// ==========================================
-function navegar(pantalla) {
+  function cancelarAtencion() {
+    const loadingText = document.getElementById('loadingText');
+    const loading = document.getElementById('loading');
+    const viewA = document.getElementById('viewAtencion');
+    const viewL = document.getElementById('viewLista');
+    const tituloGlobal = document.getElementById('mainTitle');
+    
+    if(!casoActual) return;
+
+    if(loadingText) loadingText.textContent = "<?= CEREBRO.msgDesbloqueandoFolio || 'Desbloqueando folio...' ?>";
+    if(loading) loading.style.display = 'flex';
+    
+    runGAS('liberarCasoDinamico', () => {
+        casoActual = null;
+        if(loading) loading.style.display = 'none';
+        if(viewA) viewA.classList.remove('active');
+        if(viewL) viewL.classList.add('active'); 
+        
+        if(tituloGlobal) tituloGlobal.innerHTML = `<?= CEREBRO.mod1Title || 'Atención Folios' ?> <span id="displayFolio" style="display:none;"></span>`;
+        
+        cargarCasos();
+    }, casoActual.numeroFila);
+  }
+
+  // ==========================================
+  // HISTORIAL Y DETALLES
+  // ==========================================
+  function renderHistorial(h) {
+    const b = document.getElementById('tablaHistorial');
+    if (!b) return;
+
+    if (!h || h.length === 0) { 
+        b.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:20px;color:#999;"><?= CEREBRO.msgSinHistorial || 'Sin historial previo para este cliente.' ?></td></tr>`; 
+        return; 
+    }
+    
+    const parseDate = (str) => {
+      if (!str) return new Date(0);
+      const [dPart, hPart] = str.split(' ');
+      if (!dPart) return new Date(0);
+      const parts = dPart.split('/');
+      if (parts.length < 3) return new Date(0);
+      const d = parseInt(parts[0], 10), m = parseInt(parts[1], 10), y = parseInt(parts[2], 10);
+      let hh = 0, mm = 0, ss = 0;
+      if (hPart) {
+          const hParts = hPart.split(':');
+          hh = parseInt(hParts[0], 10) || 0;
+          mm = parseInt(hParts[1], 10) || 0;
+          ss = parseInt(hParts[2], 10) || 0;
+      }
+      return new Date(y, m - 1, d, hh, mm, ss);
+    };
+    
+    h.sort((a, b) => { return parseDate(a.fecha) - parseDate(b.fecha); });
+    historialActual = h;
+
+    let r = '';
+    h.forEach((x, idx) => {
+      r += `<tr style="border-bottom:1px solid #f1f3f5;">
+              <td class="hist-fecha">${x.fecha || '-'}</td>
+              <td class="hist-folio">${x.folio || '-'}</td>
+              <td class="hist-curp">${x.curp || '-'}</td>
+              <td class="hist-cuenta">${x.cuenta || '-'}</td>
+              <td class="hist-atencion">${x.atencion || '-'}</td>
+              <td class="hist-usr">${x.usr || '-'}</td>
+              <td class="hist-clasif"><b style="color:var(--primary)">${x.clasificacion || '-'}</b></td>
+              <td class="hist-notas clickable-data" onclick="mostrarModalDetalleHist(${idx})" title="<?= CEREBRO.lblVerCompleto || 'Clic para ver completo' ?>">${x.indicaciones || '-'}</td>
+            </tr>`;
+    });
+    b.innerHTML = r;
+  }
+
+  function mostrarModalDetalleHist(idx) {
+    const data = historialActual[idx];
+    document.getElementById('modalNoteTitle').textContent = "<?= CEREBRO.lblNotasGestion || 'Notas de Gestión' ?>";
+    document.getElementById('fullNoteText').textContent = data.indicaciones;
+    document.getElementById('modalNote').style.display = 'flex';
+  }
+
+  function mostrarModalDetalleBot() {
+    document.getElementById('modalNoteTitle').textContent = "<?= CEREBRO.lblComentariosBot || 'Comentarios del Bot' ?>";
+    document.getElementById('fullNoteText').textContent = casoActual.datos["Comentarios Bot"] || casoActual.datos["NOTAS_INTERNAS"] || "<?= CEREBRO.msgSinComentarios || 'Sin comentarios.' ?>";
+    document.getElementById('modalNote').style.display = 'flex';
+  }
+
+  // ==========================================
+  // NAVEGACIÓN PRINCIPAL
+  // ==========================================
+  function navegar(pantalla) {
     if (casoActual !== null) {
-      showToast("⚠️ Tienes un folio en atención. Finalízalo o pulsa 'Cancelar Atención' antes de salir.", "error");
+      const msg = `<?= CEREBRO.msgAvisoSalida || '⚠️ Tienes un folio en atención. Finalízalo o pulsa Cancelar Atención antes de salir.' ?>`;
+      showToast(msg, "error");
       return; 
     }
   
@@ -445,100 +460,135 @@ function navegar(pantalla) {
     document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
     
     const tituloGlobal = document.getElementById('mainTitle');
+    const appTitle = `<?= CEREBRO.appTitle || 'Hub Sentinel' ?>`;
     
     if (pantalla === 'home') {
       const menuHome = document.getElementById('menuHome');
       if (menuHome) menuHome.classList.add('active');
       document.getElementById('viewHome').classList.add('active');
-      if(tituloGlobal) tituloGlobal.innerText = 'Bienvenido - Hub Sentinel Fraudes RI-FI'; 
+      if(tituloGlobal) tituloGlobal.innerText = `<?= CEREBRO.lblBienvenido || 'Bienvenido - ' ?>${appTitle}`; 
     } 
     else if (pantalla === 'atencion') {
       document.getElementById('menuAtencion').classList.add('active'); 
       document.getElementById('viewLista').classList.add('active'); 
-      if(tituloGlobal) tituloGlobal.innerText = 'Atención Folios Biométricos'; 
+      if(tituloGlobal) tituloGlobal.innerText = `<?= CEREBRO.mod1Title || 'Atención Folios' ?>`; 
       cargarCasos(); 
     } 
     else if (pantalla === 'explorador') {
       document.getElementById('menuExplorador').classList.add('active'); 
       document.getElementById('viewExplorador').classList.add('active'); 
-      if(tituloGlobal) tituloGlobal.innerHTML = 'Buscador de Folios <span id="displayFolio" style="display:none;"></span>'; 
+      if(tituloGlobal) tituloGlobal.innerHTML = `<?= CEREBRO.mod2Title || 'Buscador de Folios' ?> <span id="displayFolio" style="display:none;"></span>`; 
     }
     else if (pantalla === 'config') {
       document.getElementById('menuConfig').classList.add('active'); 
       document.getElementById('viewConfig').classList.add('active'); 
-      if(tituloGlobal) tituloGlobal.innerText = 'Mesa de Control - Configuración'; 
+      if(tituloGlobal) tituloGlobal.innerText = "<?= CEREBRO.lblMesaControl || 'Mesa de Control' ?>"; 
       
-      // Solo carga del servidor si es la primera vez en esta sesión
-      if (!configYaCargada) {
-        cargarConfiguracion(); 
-      }
+      if (!configYaCargada) cargarConfiguracion(); 
     }
   }
 
   // ==========================================
-  // LÓGICA DE INTERFAZ: EXPLORADOR DE FOLIOS
+  // EXPLORADOR Y SELECTORES MÚLTIPLES (CHOICES.JS)
   // ==========================================
   function toggleFiltrosExplorador() {
     const container = document.getElementById('filterContainer');
     const btn = document.getElementById('btnToggleFiltros');
     if (!container || !btn) return;
     container.classList.toggle('collapsed');
-    btn.textContent = container.classList.contains('collapsed') ? "MOSTRAR ▼" : "OCULTAR ▲";
+    btn.textContent = container.classList.contains('collapsed') ? "<?= CEREBRO.lblMostrar || 'MOSTRAR' ?> ▼" : "<?= CEREBRO.lblOcultar || 'OCULTAR' ?> ▲";
   }
 
   function limpiarFiltrosExplorador() {
-    const inputs = document.querySelectorAll('#filterContainer .filter-input');
+    const inputs = document.querySelectorAll('#filterContainer .filter-input:not(select)');
     inputs.forEach(input => input.value = "");
+    
+    // Limpiar Choices.js
+    if(choiceTipoId) choiceTipoId.removeActiveItems();
+    if(choiceTipoCaso) choiceTipoCaso.removeActiveItems();
+    if(choiceClasif) choiceClasif.removeActiveItems();
   }
 
-  // ==========================================
-  // MOTOR DEL EXPLORADOR (ENVIAR Y RECIBIR DATOS)
-  // ==========================================
-  function buscarEnExplorador() {
-    const fInicio = document.getElementById('filtroFechaInicio').value;
-    const fFin = document.getElementById('filtroFechaFin').value;
-    const rCond = document.getElementById('filtroResCondicion').value;
-    const rMin = document.getElementById('filtroResMinutos').value;
-    const folio = document.getElementById('filtroFolio').value.trim();
-    const curp = document.getElementById('filtroCurp').value.trim();
-    const cuenta = document.getElementById('filtroCuenta').value.trim();
-    const tienda = document.getElementById('filtroTienda').value.trim();
-    const correo = document.getElementById('filtroCorreo').value.trim();
-    const usr = document.getElementById('filtroUsr').value.trim();
-    const tId = document.getElementById('filtroTipoId').value;
-    const tCaso = document.getElementById('filtroTipoCaso').value;
-    const clasif = document.getElementById('filtroClasificacion').value;
+  function cargarCatalogosExplorador() {
+    runGAS('obtenerCatalogosExplorador', function(res) {
+      if (res && res.exito) {
+        inicializarChoices(res);
+      }
+    });
+  }
 
-    if (!fInicio && !fFin && !folio && !curp && !cuenta && !tienda && !correo && !usr && !tId && !tCaso && !clasif && !rCond) {
-      showToast("⚠️ Por favor ingresa al menos un criterio de búsqueda.", "error");
+  function inicializarChoices(res) {
+    const cfg = { 
+      removeItemButton: true, 
+      searchPlaceholderValue: "<?= CEREBRO.lblBuscarP || 'Buscar...' ?>", 
+      itemSelectText: "",
+      noResultsText: "<?= CEREBRO.msgSinCoincidencias || 'Sin coincidencias' ?>",
+      noChoicesText: "<?= CEREBRO.msgSinOpciones || 'Sin opciones' ?>"
+    };
+    const fill = (id, list) => {
+      const el = document.getElementById(id);
+      if(el) el.innerHTML = list.map(t => `<option value="${t}">${t}</option>`).join('');
+    };
+    
+    if(res.tipoId) fill('filtroTipoId', res.tipoId);
+    if(res.tipoCaso) fill('filtroTipoCaso', res.tipoCaso);
+    if(res.clasificacion) fill('filtroClasificacion', res.clasificacion);
+    
+    const fId = document.getElementById('filtroTipoId');
+    const fCaso = document.getElementById('filtroTipoCaso');
+    const fClas = document.getElementById('filtroClasificacion');
+    
+    if(fId) choiceTipoId = new Choices(fId, cfg);
+    if(fCaso) choiceTipoCaso = new Choices(fCaso, cfg);
+    if(fClas) choiceClasif = new Choices(fClas, cfg);
+  }
+
+  function buscarEnExplorador() {
+    const fInicio = document.getElementById('filtroFechaInicio') ? document.getElementById('filtroFechaInicio').value : "";
+    const fFin = document.getElementById('filtroFechaFin') ? document.getElementById('filtroFechaFin').value : "";
+    const rCond = document.getElementById('filtroResCondicion') ? document.getElementById('filtroResCondicion').value : "";
+    const rMin = document.getElementById('filtroResMinutos') ? document.getElementById('filtroResMinutos').value : "";
+    
+    const kw = document.getElementById('filtroKw') ? document.getElementById('filtroKw').value.trim() : ""; 
+    const folio = document.getElementById('filtroFolio') ? document.getElementById('filtroFolio').value.trim() : "";
+    const curp = document.getElementById('filtroCurp') ? document.getElementById('filtroCurp').value.trim() : "";
+    const cuenta = document.getElementById('filtroCuenta') ? document.getElementById('filtroCuenta').value.trim() : "";
+    
+    const tId = choiceTipoId ? choiceTipoId.getValue(true) : [];
+    const tCaso = choiceTipoCaso ? choiceTipoCaso.getValue(true) : [];
+    const clasif = choiceClasif ? choiceClasif.getValue(true) : [];
+
+    if (!kw && !fInicio && !fFin && !folio && !curp && !cuenta && tId.length === 0 && tCaso.length === 0 && clasif.length === 0) {
+      const msgFiltros = `<?= CEREBRO.msgFiltros || '⚠️ Define al menos un filtro de búsqueda.' ?>`;
+      showToast(msgFiltros, "error");
       return;
     }
 
     const filtros = {
-      fechaInicio: fInicio, fechaFin: fFin, resCondicion: rCond, resMinutos: rMin,
-      folio: folio, curp: curp, cuenta: cuenta, tienda: tienda, correo: correo,
-      usr: usr, tipoId: tId, tipoCaso: tCaso, clasificacion: clasif
+      palabraClave: kw, fechaInicio: fInicio, fechaFin: fFin, resCondicion: rCond, resMinutos: rMin,
+      folio: folio, curp: curp, cuenta: cuenta, tipoId: tId, tipoCaso: tCaso, clasificacion: clasif
     };
 
     const container = document.getElementById('filterContainer');
     const btn = document.getElementById('btnToggleFiltros');
     if (container && btn) {
       container.classList.add('collapsed');
-      btn.textContent = "MOSTRAR ▼";
+      btn.textContent = "<?= CEREBRO.lblMostrar || 'MOSTRAR' ?> ▼";
     }
 
     const contenedor = document.getElementById('tablaExploradorContenedor');
-    contenedor.innerHTML = '<div style="text-align:center; padding:60px 20px; color:#999;"><span style="font-size:30px; display:block; margin-bottom:10px;">⏳</span>Buscando en la base de datos...</div>';
+    contenedor.innerHTML = `<div style="text-align:center; padding:60px 20px; color:#999;"><span style="font-size:30px; display:block; margin-bottom:10px;">⏳</span><?= CEREBRO.msgBuscandoBD || 'Buscando en la base de datos...' ?></div>`;
 
     runGAS('buscarFoliosExplorador', function(res) {
       if (res && res.exito) {
         if (res.data.length === 0) {
-          contenedor.innerHTML = '<div style="text-align:center; padding:60px 20px; color:#999;">No se encontraron folios que coincidan con tus filtros.</div>';
+          const msgNoRes = `<?= CEREBRO.msgNoResultados || 'No se encontraron folios que coincidan con tus filtros.' ?>`;
+          contenedor.innerHTML = `<div style="text-align:center; padding:60px 20px; color:#999;">${msgNoRes}</div>`;
         } else {
           renderTablaExplorador(res.data);
         }
       } else {
-        contenedor.innerHTML = `<div style="text-align:center; padding:60px 20px; color:red;">Error del servidor: ${res ? res.mensaje : "Desconocido"}</div>`;
+        contenedor.innerHTML = `<div style="text-align:center; padding:60px 20px; color:red;"><?= CEREBRO.msgErrorServidor || 'Error del servidor: ' ?>${res ? res.mensaje : "<?= CEREBRO.msgDesconocido || 'Desconocido' ?>"}</div>`;
       }
     }, filtros);
   }
@@ -546,11 +596,6 @@ function navegar(pantalla) {
   // ==========================================
   // MEGA-TABLA PAGINADA DEL EXPLORADOR
   // ==========================================
-  
-  let datosExploradorMemoria = [];
-  let paginaActualExplorador = 1;
-  const REGISTROS_POR_PAGINA = 100;
-
   function renderTablaExplorador(datos) {
     datosExploradorMemoria = datos;
     paginaActualExplorador = 1;
@@ -566,29 +611,40 @@ function navegar(pantalla) {
     const fin = Math.min(inicio + REGISTROS_POR_PAGINA, datosExploradorMemoria.length);
     const paginaDatos = datosExploradorMemoria.slice(inicio, fin);
 
+    // Leer Diccionario para Nombres Visuales
+    const diccStr = `<?!= CEREBRO.diccionario ? CEREBRO.diccionario : '[]' ?>`;
+    let diccionario = [];
+    try { diccionario = JSON.parse(diccStr); } catch(e) {}
+    
+    // Función auxiliar para obtener el nombre visual seguro
+    const getVisName = (bdKey, defaultName) => {
+      const col = diccionario.find(c => c.bd === bdKey);
+      return (col && col.visual) ? col.visual : defaultName;
+    };
+
     let html = `
       <div style="flex: 1; overflow: auto; border-bottom: 1px solid #dee2e6;">
         <table style="width: 100%; border-collapse: collapse; min-width: 2600px; font-size: 11.5px; text-align: center; white-space: nowrap;">
           <thead style="position: sticky; top: 0; background: var(--secondary); color: #fff; z-index: 2;">
             <tr>
-              <th style="padding: 10px; position: sticky; left: 0; top: 0; background: var(--secondary); z-index: 10; min-width: 130px; text-align: left;">Folio</th>
-              <th style="padding: 10px; position: sticky; left: 130px; top: 0; background: var(--secondary); z-index: 10; min-width: 160px;">CURP</th>
-              <th style="padding: 10px; position: sticky; left: 290px; top: 0; background: var(--secondary); z-index: 10; min-width: 160px; box-shadow: 2px 0 5px rgba(0,0,0,0.1);">Cuenta</th>
-              <th style="padding: 10px;">Fecha Folio</th>
-              <th style="padding: 10px;">Tipo Cliente</th>
-              <th style="padding: 10px;">Tipo Identificación</th>
-              <th style="padding: 10px; text-align: left;">Tipo Caso</th>
-              <th style="padding: 10px; text-align: left;">Servicio</th>
-              <th style="padding: 10px;">Tienda</th>
-              <th style="padding: 10px; text-align: left;">Correo Usuario</th>
-              <th style="padding: 10px;">Repetido</th>
-              <th style="padding: 10px;">Especialista</th>
-              <th style="padding: 10px;">Inicio Atención</th>
-              <th style="padding: 10px;">Fin Atención</th>
-              <th style="padding: 10px;">SLA (HH:MM:SS)</th>
-              <th style="padding: 10px; text-align: left;">Notas Bot</th>
-              <th style="padding: 10px; text-align: left;">Clasificación</th>
-              <th style="padding: 10px; text-align: left;">Indicaciones</th>
+              <th style="padding: 10px; position: sticky; left: 0; top: 0; background: var(--secondary); z-index: 10; min-width: 130px; text-align: left;">${getVisName('FOLIO', 'Folio')}</th>
+              <th style="padding: 10px; position: sticky; left: 130px; top: 0; background: var(--secondary); z-index: 10; min-width: 160px;">${getVisName('CURP', 'CURP')}</th>
+              <th style="padding: 10px; position: sticky; left: 290px; top: 0; background: var(--secondary); z-index: 10; min-width: 160px; box-shadow: 2px 0 5px rgba(0,0,0,0.1);">${getVisName('Cuenta', 'Cuenta')}</th>
+              <th style="padding: 10px;">${getVisName('Marca temporal', 'Fecha Folio')}</th>
+              <th style="padding: 10px;">${getVisName('Tipo Cliente', 'Tipo Cliente')}</th>
+              <th style="padding: 10px;">${getVisName('Tipo de Identificación', 'Tipo Identificación')}</th>
+              <th style="padding: 10px; text-align: left;">${getVisName('Tipo Caso', 'Tipo Caso')}</th>
+              <th style="padding: 10px; text-align: left;">${getVisName('Servicio', 'Servicio')}</th>
+              <th style="padding: 10px;">${getVisName('Tienda', 'Tienda')}</th>
+              <th style="padding: 10px; text-align: left;">${getVisName('Dirección de correo electrónico', 'Correo Usuario')}</th>
+              <th style="padding: 10px;">${getVisName('Repetido', 'Repetido')}</th>
+              <th style="padding: 10px;">${getVisName('USR', 'Especialista')}</th>
+              <th style="padding: 10px;">${getVisName('InicioAtencion', 'Inicio Atención')}</th>
+              <th style="padding: 10px;">${getVisName('Atención', 'Fin Atención')}</th>
+              <th style="padding: 10px;">${getVisName('Resolución', 'SLA (HH:MM:SS)')}</th>
+              <th style="padding: 10px; text-align: left;">${getVisName('Comentarios Bot', 'Notas Bot')}</th>
+              <th style="padding: 10px; text-align: left;">${getVisName('Clasificación', 'Clasificación')}</th>
+              <th style="padding: 10px; text-align: left;">${getVisName('Indicaciones', 'Indicaciones')}</th>
             </tr>
           </thead>
           <tbody>
@@ -597,29 +653,22 @@ function navegar(pantalla) {
     paginaDatos.forEach((row, idx) => {
       const txtRepetido = (row.repetido && String(row.repetido).trim() !== '' && String(row.repetido).trim() !== '-') ? 'Sí' : 'No';
 
-      // ✨ MAGIA SLA: Convertir los decimales de Google Sheets al formato exacto HH:MM:SS
       let slaFinalMins = parseFloat(row.resolucion) || 0;
       let hSla = Math.floor(slaFinalMins / 60);
       let mSla = Math.floor(slaFinalMins % 60);
       let sSla = Math.round((slaFinalMins * 60) % 60);
       
-      // Ajuste por si los segundos redondean a 60
       if (sSla === 60) { sSla = 0; mSla++; }
       if (mSla === 60) { mSla = 0; hSla++; }
 
-      let slaFormateado = String(hSla).padStart(2, '0') + ':' + 
-                          String(mSla).padStart(2, '0') + ':' + 
-                          String(sSla).padStart(2, '0');
-
-      // Indice real dentro del array global para pasarlo a los modales sin romper el código
+      let slaFormateado = String(hSla).padStart(2, '0') + ':' + String(mSla).padStart(2, '0') + ':' + String(sSla).padStart(2, '0');
       let idxGlobal = inicio + idx;
 
       html += `
         <tr style="border-bottom: 1px solid #eee; background: #fff;">
-          <td style="padding: 10px; position: sticky; left: 0; background: #fff; z-index: 1; border-right: 1px solid #ddd; font-weight: 700; color: var(--primary); cursor:pointer; min-width: 130px; text-align: left;" onclick="abrirModalExplorador('Folio', ${idxGlobal})">${row.folio}</td>
+          <td style="padding: 10px; position: sticky; left: 0; background: #fff; z-index: 1; border-right: 1px solid #ddd; font-weight: 700; color: var(--primary); cursor:pointer; min-width: 130px; text-align: left;" onclick="mostrarDetalleExplorador('Folio', ${idxGlobal})">${row.folio}</td>
           <td style="padding: 10px; position: sticky; left: 130px; background: #fff; z-index: 1; border-right: 1px solid #ddd; min-width: 160px;">${row.curp}</td>
           <td style="padding: 10px; position: sticky; left: 290px; background: #fff; z-index: 1; border-right: 2px solid #ddd; min-width: 160px;">${row.cuenta}</td>
-          
           <td style="padding: 10px;">${row.marca}</td>
           <td style="padding: 10px;">${row.tipoCli}</td>
           <td style="padding: 10px;">${row.tipoId}</td>
@@ -631,27 +680,24 @@ function navegar(pantalla) {
           <td style="padding: 10px;">${row.usr}</td>
           <td style="padding: 10px;">${row.inicioAtn}</td>
           <td style="padding: 10px;">${row.atencion}</td>
-          
           <td style="padding: 10px; font-weight: bold; color: ${slaFinalMins > 30 ? 'red' : 'inherit'};">${slaFormateado}</td>
-          
-          <td class="clickable-data" style="padding: 10px; text-align: left; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" onclick="mostrarDetalleExplorador('Notas Bot', ${idxGlobal})" title="Clic para ver completo">${row.comentarios || '-'}</td>
+          <td class="clickable-data" style="padding: 10px; text-align: left; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" onclick="mostrarDetalleExplorador('Notas Bot', ${idxGlobal})" title="<?= CEREBRO.lblVerCompleto || 'Clic para ver completo' ?>">${row.comentarios || '-'}</td>
           <td style="padding: 10px; font-weight: bold; text-align: left;">${row.clasificacion}</td>
-          <td class="clickable-data" style="padding: 10px; text-align: left; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" onclick="mostrarDetalleExplorador('Indicaciones', ${idxGlobal})" title="Clic para ver completo">${row.indicaciones || '-'}</td>
+          <td class="clickable-data" style="padding: 10px; text-align: left; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" onclick="mostrarDetalleExplorador('Indicaciones', ${idxGlobal})" title="<?= CEREBRO.lblVerCompleto || 'Clic para ver completo' ?>">${row.indicaciones || '-'}</td>
         </tr>
       `;
     });
 
     html += `</tbody></table></div>`;
-
     html += `
       <div style="flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; background: #f8f9fa;">
         <div style="font-size: 13px; color: #555;">
-          Mostrando <b>${inicio + 1}</b> al <b>${fin}</b> de <b style="color: var(--primary); font-size: 14px;">${datosExploradorMemoria.length}</b> folios encontrados.
+          <?= CEREBRO.lblMostrando || 'Mostrando' ?> <b>${inicio + 1}</b> <?= CEREBRO.lblAl || 'al' ?> <b>${fin}</b> <?= CEREBRO.lblDe || 'de' ?> <b style="color: var(--primary); font-size: 14px;">${datosExploradorMemoria.length}</b> <?= CEREBRO.lblFolios || 'folios.' ?>
         </div>
         <div style="display: flex; gap: 15px; align-items: center;">
-          <button class="btn btn-secondary" style="padding: 6px 15px; margin: 0; ${paginaActualExplorador === 1 ? 'opacity: 0.5; cursor: not-allowed;' : ''}" onclick="cambiarPaginaExplorador(-1)" ${paginaActualExplorador === 1 ? 'disabled' : ''}>⬅️ Anterior</button>
-          <span style="font-weight: 700; color: var(--secondary); font-size: 13px;">Página ${paginaActualExplorador} de ${totalPaginas}</span>
-          <button class="btn btn-secondary" style="padding: 6px 15px; margin: 0; ${paginaActualExplorador === totalPaginas ? 'opacity: 0.5; cursor: not-allowed;' : ''}" onclick="cambiarPaginaExplorador(1)" ${paginaActualExplorador === totalPaginas ? 'disabled' : ''}>Siguiente ➡️</button>
+          <button class="btn btn-secondary" style="padding: 6px 15px; margin: 0; ${paginaActualExplorador === 1 ? 'opacity: 0.5; cursor: not-allowed;' : ''}" onclick="cambiarPaginaExplorador(-1)" ${paginaActualExplorador === 1 ? 'disabled' : ''}><?= CEREBRO.lblAnterior || '⬅️ Anterior' ?></button>
+          <span style="font-weight: 700; color: var(--secondary); font-size: 13px;"><?= CEREBRO.lblPagina || 'Página' ?> ${paginaActualExplorador} <?= CEREBRO.lblDe || 'de' ?> ${totalPaginas}</span>
+          <button class="btn btn-secondary" style="padding: 6px 15px; margin: 0; ${paginaActualExplorador === totalPaginas ? 'opacity: 0.5; cursor: not-allowed;' : ''}" onclick="cambiarPaginaExplorador(1)" ${paginaActualExplorador === totalPaginas ? 'disabled' : ''}><?= CEREBRO.lblSiguiente || 'Siguiente ➡️' ?></button>
         </div>
       </div>
     `;
@@ -664,92 +710,50 @@ function navegar(pantalla) {
     dibujarPaginaExplorador();
   }
 
-  // ==========================================
-  // CARGAR CATÁLOGOS DEL EXPLORADOR
-  // ==========================================
-  function cargarCatalogosExplorador() {
-    runGAS('obtenerCatalogosExplorador', function(res) {
-      if (res && res.exito) {
-        llenarSelectDinamico('filtroTipoId', res.tipoId);
-        llenarSelectDinamico('filtroTipoCaso', res.tipoCaso);
-        llenarSelectDinamico('filtroClasificacion', res.clasificacion);
-      } else {
-        console.error("Error al cargar catálogos del explorador:", res ? res.mensaje : "Desconocido");
-      }
-    });
-  }
-
-  function llenarSelectDinamico(idElemento, opcionesUnicas) {
-    const select = document.getElementById(idElemento);
-    if (!select) return;
-    
-    const primeraOpcion = select.options[0].outerHTML;
-    let html = primeraOpcion;
-    
-    opcionesUnicas.forEach(opcion => {
-      if(opcion && opcion.trim() !== "") {
-        html += `<option value="${opcion}">${opcion}</option>`;
-      }
-    });
-    
-    select.innerHTML = html;
-  }
-
-  // ==========================================
-  // LECTOR DE TEXTOS ANTICRASH (Usando tu Modal Nativo)
-  // ==========================================
   function mostrarDetalleExplorador(tipo, idxGlobal) {
     const row = datosExploradorMemoria[idxGlobal];
     if (!row) return;
 
     if (tipo === 'Folio') {
-      document.getElementById('modalNoteTitle').textContent = 'Detalles del Folio';
+      document.getElementById('modalNoteTitle').textContent = "<?= CEREBRO.lblDetallesFolio || 'Detalles del Folio' ?>";
       document.getElementById('fullNoteText').textContent = row.folio;
     } else if (tipo === 'Notas Bot') {
-      document.getElementById('modalNoteTitle').textContent = 'Comentarios del Bot';
-      document.getElementById('fullNoteText').textContent = row.comentarios || "Sin comentarios.";
+      document.getElementById('modalNoteTitle').textContent = "<?= CEREBRO.lblComentariosBot || 'Comentarios del Bot' ?>";
+      document.getElementById('fullNoteText').textContent = row.comentarios || "<?= CEREBRO.msgSinComentarios || 'Sin comentarios.' ?>";
     } else if (tipo === 'Indicaciones') {
-      document.getElementById('modalNoteTitle').textContent = 'Indicaciones del Asesor';
-      document.getElementById('fullNoteText').textContent = row.indicaciones || "Sin indicaciones.";
+      document.getElementById('modalNoteTitle').textContent = "<?= CEREBRO.lblIndicacionesAsesor || 'Indicaciones del Asesor' ?>";
+      document.getElementById('fullNoteText').textContent = row.indicaciones || "<?= CEREBRO.msgSinIndicaciones || 'Sin indicaciones.' ?>";
     }
     
-    // Abrimos TU modal de siempre
     document.getElementById('modalNote').style.display = 'flex';
   }
 
   // ==========================================
-  // PREVENCIÓN DE CIERRE ACCIDENTAL
+  // PREVENCIÓN DE CIERRE Y SIDEBAR
   // ==========================================
   window.addEventListener('beforeunload', function (e) {
     if (casoActual !== null) {
-      if (typeof google !== 'undefined') {
-        google.script.run.liberarCasoDinamico(casoActual.numeroFila);
-      }
+      if (typeof google !== 'undefined') google.script.run.liberarCasoDinamico(casoActual.numeroFila);
       e.preventDefault();
-      e.returnValue = 'Tienes un caso en atención. Si sales, el folio podría quedar bloqueado.';
+      e.returnValue = "<?= CEREBRO.msgAvisoSalida || 'Tienes un caso en atención. Si sales, el folio podría quedar bloqueado.' ?>";
     }
   });
 
-  // ==========================================
-  // OCULTAR SIDEBAR AL HACER CLIC AFUERA
-  // ==========================================
   document.addEventListener('click', function(event) {
     const sidebar = document.getElementById('sidebar');
+    if(!sidebar) return;
     const clickAdentro = sidebar.contains(event.target);
     const clickEnBoton = event.target.closest('.hamburger-btn');
-
-    if (sidebar && sidebar.classList.contains('active') && !clickAdentro && !clickEnBoton) {
+    if (sidebar.classList.contains('active') && !clickAdentro && !clickEnBoton) {
       sidebar.classList.remove('active');
     }
   });
 
-
   // ==========================================
-  // MÓDULO MESA DE CONTROL (GLOBAL + DICCIONARIO)
+  // MESA DE CONTROL (GLOBAL + DICCIONARIO)
   // ==========================================
-  
-    function cargarConfiguracion() {
-    document.getElementById('loadingText').textContent = "Descifrando variables...";
+  function cargarConfiguracion() {
+    document.getElementById('loadingText').textContent = "<?= CEREBRO.msgDescifrando || 'Descifrando variables...' ?>";
     document.getElementById('loading').style.display = 'flex';
 
     runGAS('leerConfiguracionGeneral', cfg => {
@@ -769,15 +773,11 @@ function navegar(pantalla) {
       document.getElementById('cfg_mod2Title').value      = cfg.mod2Title;
       document.getElementById('cfg_mod2Desc').value       = cfg.mod2Desc;
       
-      // REINICIAR SEGURIDAD VISUAL PARA AMBOS CAMPOS
       ['cfg_sheetId', 'cfg_backupFolderId'].forEach(id => {
         const input = document.getElementById(id);
-        const group = document.getElementById('group_' + id.replace('cfg_', '')); // Maneja ambos group_
         const iconHide = document.getElementById('icon_hide_' + id);
         const iconShow = document.getElementById('icon_show_' + id);
-        
         if(input) input.type = 'password';
-        // Ajuste temporal para el group ID que no sigue la regla exacta:
         const groupReal = document.getElementById(id === 'cfg_sheetId' ? 'group_sheetId' : 'group_backupFolderId');
         if(groupReal) groupReal.classList.remove('security-visible');
         if(iconHide) iconHide.style.display = 'inline-block';
@@ -798,29 +798,24 @@ function navegar(pantalla) {
   }
 
   function guardarConfiguracion() {
-    // 1. RECOLECTAR DATOS DE LA TABLA DICCIONARIO
     const tbody = document.getElementById('diccionario_body');
     const filas = tbody.querySelectorAll('tr');
     let jsonDiccionario = [];
 
     filas.forEach(tr => {
-      // OJO: Se agregó "textarea" a la búsqueda
       const inputs = tr.querySelectorAll('input, select, textarea');
-      
-      // Solo guardar si escribieron el Nombre en BD
       if(inputs[0] && inputs[0].value.trim() !== '') {
         jsonDiccionario.push({
           bd: inputs[0].value.trim(),
           visual: inputs[1].value.trim(),
           tipo: inputs[2].value,
-          desc: inputs[3].value.trim(),   // <--- Ahora viene del TEXTAREA
+          desc: inputs[3].value.trim(),  
           filtro: inputs[4].checked,
           editable: inputs[5].checked
         });
       }
     });
 
-    // 2. RECOLECTAR EL RESTO DE LAS VARIABLES
     const datosConfig = {
       filas:          document.getElementById('cfg_filas').value,
       limbo:          document.getElementById('cfg_limbo').value,
@@ -828,7 +823,7 @@ function navegar(pantalla) {
       sheetId:        document.getElementById('cfg_sheetId').value,
       sheetName:      document.getElementById('cfg_sheetName').value,
       catalogName:    document.getElementById('cfg_catalogName').value,
-      backupFolderId: document.getElementById('cfg_backupFolderId').value, // <--- NUEVO
+      backupFolderId: document.getElementById('cfg_backupFolderId').value, 
       admins:         document.getElementById('cfg_admins').value,
       soporte:        document.getElementById('cfg_soporte').value,
       appTitle:       document.getElementById('cfg_appTitle').value,
@@ -840,21 +835,25 @@ function navegar(pantalla) {
       diccionario:    JSON.stringify(jsonDiccionario)
     };
 
-    // 3. ENVIAR A GOOGLE APPS SCRIPT
-    document.getElementById('loadingText').textContent = "Encriptando y respaldando en Drive...";
+    document.getElementById('loadingText').textContent = "<?= CEREBRO.msgRespaldando || 'Encriptando y respaldando en Drive...' ?>";
     document.getElementById('loading').style.display = 'flex';
 
     runGAS('guardarConfiguracionGeneral', res => {
       document.getElementById('loading').style.display = 'none';
       if(res && res.exito) {
-        showToast("¡Configuración guardada y respaldada en Drive!", "success");
+        showToast("<?= CEREBRO.msgConfigGuardada || '¡Configuración guardada y respaldada en Drive!' ?>", "success");
       } else {
-        mostrarError("Error al guardar/respaldar: " + (res ? res.mensaje : "Desconocido"));
+        mostrarError("<?= CEREBRO.msgErrorGuardar || 'Error al guardar/respaldar: ' ?>" + (res ? res.mensaje : "<?= CEREBRO.msgDesconocido || 'Desconocido' ?>"));
       }
     }, datosConfig);
   }
 
-  // --- FUNCIONES DEL DICCIONARIO INTERACTIVO ---
+  function autoResizeTextarea(textarea) {
+    textarea.style.height = '33px'; 
+    const scrollHeight = textarea.scrollHeight;
+    if (scrollHeight > 33) textarea.style.height = scrollHeight + 'px'; 
+  }
+
   function agregarFilaDiccionario(datos = null) {
     const tbody = document.getElementById('diccionario_body');
     const tr = document.createElement('tr');
@@ -878,8 +877,7 @@ function navegar(pantalla) {
           <option ${tipo === 'Texto Largo' ? 'selected' : ''}>Texto Largo</option>
         </select>
       </td>
-      <!-- TEXTAREA CON EVENTO DE AUTO-AJUSTE -->
-      <td><textarea class="schema-textarea" rows="1" placeholder="Comentarios y apuntes...">${descVal}</textarea></td>
+      <td><textarea class="schema-textarea" placeholder="Comentarios..." oninput="autoResizeTextarea(this)">${descVal}</textarea></td>
       <td style="text-align:center;"><label class="checkbox-wrapper"><input type="checkbox" ${filChk}></label></td>
       <td style="text-align:center;"><label class="checkbox-wrapper"><input type="checkbox" ${edChk}></label></td>
       <td style="text-align:center;">
@@ -889,19 +887,19 @@ function navegar(pantalla) {
       </td>
     `;
     tbody.appendChild(tr);
-
+    const textareas = tr.querySelectorAll('textarea');
+    textareas.forEach(ta => autoResizeTextarea(ta));
   }
 
   function eliminarFilaDiccionario(btn) {
-    const fila = btn.closest('tr');
-    fila.remove();
+    btn.closest('tr').remove();
   }
 
   function toggleVisibility(inputId, groupId) {
     const input = document.getElementById(inputId);
     const group = document.getElementById(groupId);
-    const iconHide = document.getElementById('icon_hide_' + inputId); // Ojo tachado
-    const iconShow = document.getElementById('icon_show_' + inputId); // Ojo abierto
+    const iconHide = document.getElementById('icon_hide_' + inputId); 
+    const iconShow = document.getElementById('icon_show_' + inputId); 
     
     if(!input || !group || !iconHide || !iconShow) return;
 
@@ -921,14 +919,10 @@ function navegar(pantalla) {
   function switchConfigTab(paneId, tabElement) {
     document.querySelectorAll('.settings-pane').forEach(pane => pane.classList.remove('active'));
     document.querySelectorAll('.settings-menu-item').forEach(item => item.classList.remove('active'));
-    
     document.getElementById(paneId).classList.add('active');
     tabElement.classList.add('active');
   }
 
-  // ==========================================
-  // LÓGICA DE RESTAURACIÓN DE RESPALDO (NUEVO)
-  // ==========================================
   function cargarRespaldoJSON(event) {
     const file = event.target.files[0];
     if(!file) return;
@@ -937,8 +931,6 @@ function navegar(pantalla) {
     reader.onload = function(e) {
       try {
         const cfgRespaldo = JSON.parse(e.target.result);
-        
-        // Rellenar variables visuales
         document.getElementById('cfg_filas').value          = cfgRespaldo.filas || "";
         document.getElementById('cfg_limbo').value          = cfgRespaldo.limbo || "";
         document.getElementById('cfg_sla').value            = cfgRespaldo.sla || "";
@@ -955,7 +947,6 @@ function navegar(pantalla) {
         document.getElementById('cfg_mod2Title').value      = cfgRespaldo.mod2Title || "";
         document.getElementById('cfg_mod2Desc').value       = cfgRespaldo.mod2Desc || "";
         
-        // Rellenar Diccionario
         let diccionarioData = [];
         try { diccionarioData = JSON.parse(cfgRespaldo.diccionario); } catch(err) {}
         
@@ -964,16 +955,13 @@ function navegar(pantalla) {
         if(diccionarioData.length === 0) agregarFilaDiccionario();
         else diccionarioData.forEach(col => agregarFilaDiccionario(col));
 
-        showToast("Respaldo cargado en pantalla. Da clic en 'Guardar Configuración' para aplicarlo.", "success");
+        showToast("<?= CEREBRO.msgRespaldoCargado || 'Respaldo cargado en pantalla. Da clic en Guardar Configuración para aplicarlo.' ?>", "success");
       } catch(error) {
-        showToast("Archivo inválido o corrupto.", "error");
+        showToast("<?= CEREBRO.msgArchivoInvalido || 'Archivo inválido o corrupto.' ?>", "error");
       }
-      event.target.value = ''; // Limpiar input para permitir recargar el mismo archivo
+      event.target.value = ''; 
     };
     reader.readAsText(file);
   }
-
-
-
 
 </script>

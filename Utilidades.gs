@@ -1,7 +1,8 @@
 /**
- * Módulo de Utilidades V1.0
- * Funciones de apoyo y soporte para el sistema.
+ * Módulo de Utilidades V2.0
+ * Funciones de apoyo y soporte para el sistema (Optimizadas con Globales)
  */
+
 
 /**
  * Obtiene la información detallada del usuario desde la hoja de equipo.
@@ -9,14 +10,16 @@
  * @returns {Object} Objeto con nombreCompleto, vpl_usr, noEmpleado y usrCode.
  */
 function obtenerInfoUsuario() {
-  var email = Session.getActiveUser().getEmail().toLowerCase();
+  // 1. MAGIA GLOBAL: Usamos la variable que se cargó al inicio del sistema
+  var email = GLOBAL_EMAIL; 
   
-  // 1. LOG DE INTENTO: Registramos quién está intentando cargar su perfil
   console.log(`[INFO USUARIO - INTENTO] Buscando datos en catálogo para el correo: ${email}`);
 
   try {
     var ss = SpreadsheetApp.openById(SHEET_EQUIPO_ID);
     var sheet = ss.getSheetByName(SHEET_EQUIPO_NAME);
+    
+    // Como esta es una tabla minúscula (solo el equipo), getValues e indexOf son instantáneos
     var data = sheet.getDataRange().getValues();
     var headers = data[0];
     
@@ -27,9 +30,8 @@ function obtenerInfoUsuario() {
         idxNoEmpleado = headers.indexOf("No_Empleado");
         
     for (var i = 1; i < data.length; i++) {
-      if (data[i][idxCorreo].toString().toLowerCase().trim() === email) {
+      if (data[i][idxCorreo] && data[i][idxCorreo].toString().toLowerCase().trim() === email) {
         
-        // 2. LOG DE ÉXITO: Confirmamos que encontramos sus credenciales
         console.log(`[INFO USUARIO - ÉXITO] Datos encontrados para: ${email} (Identificador USR: ${data[i][idxUSR]})`);
         
         return {
@@ -41,13 +43,10 @@ function obtenerInfoUsuario() {
       }
     }
     
-    // 3. LOG DE ADVERTENCIA: El ciclo terminó y el correo no estaba en el archivo
-    // Esto es vital para saber si se te olvidó registrar a un analista nuevo
-    console.warn(`[INFO USUARIO - NO ENCONTRADO] El correo ${email} no está registrado en la hoja de equipo. Se enviarán datos "N/A".`);
+    console.warn(`[INFO USUARIO - NO ENCONTRADO] El correo ${email} no está en la hoja de equipo. Se enviarán datos "N/A".`);
     
   } catch (e) {
-    // 4. LOG DE ERROR CRÍTICO: Atrapamos fallos de Google Sheets o permisos
-    console.error(`[INFO USUARIO - ERROR] Fallo técnico al buscar la información de ${email}. Detalle: ${e.toString()}`);
+    console.error(`[INFO USUARIO - ERROR] Fallo al buscar información de ${email}. Detalle: ${e.toString()}`);
   }
   
   // Fallback (Valores por defecto si no lo encuentra o hay error)
@@ -56,37 +55,40 @@ function obtenerInfoUsuario() {
 
 /**
  * Obtiene el catálogo de clasificaciones e indicaciones predefinidas.
- * Lee directamente de la pestaña de configuración para alimentar los desplegables de atención.
+ * Lee directamente de la pestaña de configuración para alimentar los desplegables.
  * @returns {Array<Object>} Lista de objetos con el formato { clasificacion: string, indicacion: string }.
  */
 function obtenerCatalogoNotas() {
-  // 1. LOG DE INTENTO (Útil para monitorear si se consulta muchas veces)
   console.log(`[CATÁLOGO - INTENTO] Solicitando lista de clasificaciones predefinidas...`);
 
   try {
     var ss = SpreadsheetApp.openById(SHEET_ID);
     var sheet = ss.getSheetByName(CATALOG_SHEET_NAME);
     
-    // Validación: ¿Existe la pestaña y tiene datos más allá del encabezado?
-    if (!sheet || sheet.getLastRow() < 2) {
-      // 2. LOG DE ADVERTENCIA: Te avisa si tu pestaña quedó vacía
-      console.warn(`[CATÁLOGO - VACÍO] La pestaña '${CATALOG_SHEET_NAME}' no existe o está vacía. El desplegable estará en blanco.`);
+    if (!sheet) {
+      console.warn(`[CATÁLOGO - VACÍO] La pestaña '${CATALOG_SHEET_NAME}' no existe. El desplegable estará en blanco.`);
       return [];
     }
 
-    // Extraemos solo los datos reales (omitimos fila 1, leemos 2 columnas)
-    var data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 2).getValues();
+    // ⚡ OPTIMIZACIÓN: Le preguntamos a Google la última fila UNA sola vez
+    var ultimaFila = sheet.getLastRow();
+
+    if (ultimaFila < 2) {
+      console.warn(`[CATÁLOGO - VACÍO] La pestaña '${CATALOG_SHEET_NAME}' está vacía. El desplegable estará en blanco.`);
+      return [];
+    }
+
+    // Usamos nuestra variable en memoria
+    var data = sheet.getRange(2, 1, ultimaFila - 1, 2).getValues();
     
-    // 3. LOG DE ÉXITO: Confirmamos cuántas opciones se cargaron
     console.log(`[CATÁLOGO - ÉXITO] Se cargaron ${data.length} opciones de clasificación exitosamente.`);
     
-    return data.map(row => ({ clasificacion: row[0], indicacion: row[1] }));
+    return data.map(function(row) { 
+      return { clasificacion: row[0], indicacion: row[1] }; 
+    });
 
   } catch (e) {
-    // 4. LOG DE ERROR CRÍTICO: Atrapamos fallos técnicos de conexión
-    console.error(`[CATÁLOGO - ERROR] Fallo al leer la hoja de configuraciones '${CATALOG_SHEET_NAME}'. Detalle: ${e.toString()}`);
-    
-    // Devolvemos un arreglo vacío como "salvavidas" para que la app no colapse
+    console.error(`[CATÁLOGO - ERROR] Fallo al leer la hoja '${CATALOG_SHEET_NAME}'. Detalle: ${e.toString()}`);
     return []; 
   }
 }
@@ -212,7 +214,7 @@ function crearPantallaBloqueo(email) {
           <h1>Acceso Restringido</h1>
           <p>Hola <span class="user-name">${nombreUser}</span>,</p>
           <p>Actualmente tu usuario no cuenta con los permisos necesarios para acceder a esta aplicación.</p>
-          <p>Por favor, contacta a <b>hmoralesa@liverpool.com.mx</b> para gestionar tu autorización correspondiente.</p>
+          <p>Por favor, contacta a <b>${CEREBRO.soporte}</b> para gestionar tu autorización correspondiente.</p>
           <div class="footer">ID de cuenta detectado: ${emailSeguro}</div>
         </div>
       </body>
@@ -224,13 +226,14 @@ function crearPantallaBloqueo(email) {
     // 3. LOG DE ERROR CRÍTICO: Por si falla el motor de plantillas HTML
     console.error(`[SEGURIDAD - ERROR VISUAL] Fallo al generar la pantalla de bloqueo para ${email}. Detalle: ${e.toString()}`);
     
-    // Fallback de emergencia ultrabásico
-    return HtmlService.createHtmlOutput("<h1>Acceso Denegado</h1><p>Contacte a hmoralesa@liverpool.com.mx</p>").setTitle("Bloqueado");
+    // Fallback de emergencia ultrabásico (También conectamos la variable aquí sumando el texto)
+    return HtmlService.createHtmlOutput("<h1>Acceso Denegado</h1><p>Contacte a " + CEREBRO.soporte + "</p>").setTitle("Bloqueado");
   }
 }
 
+
 /**
- * Genera una pantalla de error con la identidad visual de Sentinel.
+ * Genera una pantalla de error con la identidad visual de la app.
  * Actúa como el último recurso visual si el sistema falla de manera crítica.
  * @param {Error|string} error El objeto o mensaje de error capturado.
  * @param {string} email El correo del usuario afectado.
@@ -256,7 +259,7 @@ function crearPantallaError(error, email) {
         <h3 style="color: #D40099;">Hola ${nombreUser},</h3>
         
         <p style="font-size: 16px;">
-          Sentinel encontró un problema inesperado y no puede iniciar.
+          El sistema encontró un problema inesperado y no puede iniciar.
         </p>
 
         <div style="background-color: #f4f6f9; border-left: 5px solid #e74c3c; padding: 15px; margin: 20px auto; max-width: 600px; text-align: left; color: #333; font-family: monospace;">
@@ -264,7 +267,7 @@ function crearPantallaError(error, email) {
           ${mensajeError}
         </div>
 
-        <p>Por favor, envía una captura de esta pantalla a <strong>hmoralesa@liverpool.com.mx</strong>.</p>
+        <p>Por favor, envía una captura de esta pantalla a <strong>${CEREBRO.soporte}</strong>.</p>
         
         <hr style="border: 0; border-top: 1px solid #E4D3E2; margin: 30px 0;">
         <small style="color: #BF97BA;">Cuenta detectada: ${emailSeguro}</small>
@@ -272,20 +275,24 @@ function crearPantallaError(error, email) {
     `;
 
     return HtmlService.createHtmlOutput(html)
-      .setTitle("Error - Sentinel Fraudes")
+      .setTitle("Error - " + CEREBRO.appTitle) // 👇 MAGIA: Título dinámico desde tu Mesa de Control
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
       .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 
   } catch (e) {
     // 3. FALLBACK DE EMERGENCIA: Si incluso la generación de HTML falla
     console.error(`[SISTEMA - ERROR FATAL] No se pudo ni siquiera generar la pantalla de error. Detalle: ${e.toString()}`);
-    return HtmlService.createHtmlOutput("<h1>Error Fatal</h1><p>El sistema colapsó por completo. Contacte a hmoralesa@liverpool.com.mx de inmediato.</p>");
+    
+    // 👇 MAGIA: Correo dinámico en el fallback de emergencia
+    return HtmlService.createHtmlOutput("<h1>Error Fatal</h1><p>El sistema colapsó por completo. Contacte a " + CEREBRO.soporte + " de inmediato.</p>");
   }
 }
+
 
 /**
  * =======================================================
  * MÓDULO EXPLORADOR: EXTRAER CATÁLOGOS DINÁMICOS
+ * (Versión Optimizada con Globales y Escudo de Bot)
  * =======================================================
  */
 function obtenerCatalogosExplorador() {
@@ -293,26 +300,41 @@ function obtenerCatalogosExplorador() {
     var ss = SpreadsheetApp.openById(SHEET_ID);
     var sheet = ss.getSheetByName(SHEET_NAME);
     
-    // Traemos todos los datos para procesarlos rápido en memoria
-    var data = sheet.getDataRange().getValues();
-    var headers = data[0];
+    // 🛡️ EL ESCUDO DEL ROBOT
+    var ultimaFilaReal = IDX_FILA_ULTIMOFOLIO;
+    if (ultimaFilaReal < 2) {
+      ultimaFilaReal = sheet.getLastRow(); // Fallback por seguridad
+    }
     
-    // Buscamos en qué columna está cada dato
-    var idxTipoId = headers.indexOf("Tipo de Identificación");
-    var idxTipoCaso = headers.indexOf("Tipo Caso");
-    var idxClasif = headers.indexOf("Clasificación");
+    // Si no hay datos, devolvemos listas vacías para que no truene el Front
+    if (ultimaFilaReal < 2) {
+      return { exito: true, tipoId: [], tipoCaso: [], clasificacion: [] };
+    }
+    
+    // Descargamos SOLO el bloque de datos real (desde la fila 2)
+    var data = sheet.getRange(2, 1, ultimaFilaReal - 1, TODAS_LAS_COLUMNAS.length).getValues();
     
     // Usamos objetos como "Sets" para eliminar duplicados fácilmente
     var setTipoId = {};
     var setTipoCaso = {};
     var setClasif = {};
     
-    // Recorremos la base de datos (saltando la fila 1 de encabezados)
-    for (var i = 1; i < data.length; i++) {
+    // Recorremos la base de datos volando con nuestras globales
+    for (var i = 0; i < data.length; i++) {
       var row = data[i];
-      if (idxTipoId >= 0 && row[idxTipoId]) setTipoId[row[idxTipoId].toString().trim()] = true;
-      if (idxTipoCaso >= 0 && row[idxTipoCaso]) setTipoCaso[row[idxTipoCaso].toString().trim()] = true;
-      if (idxClasif >= 0 && row[idxClasif]) setClasif[row[idxClasif].toString().trim()] = true;
+      
+      // Validamos que la columna exista (> -1) y que la celda no esté vacía
+      if (IDX_TIPO_ID > -1 && row[IDX_TIPO_ID]) {
+        setTipoId[row[IDX_TIPO_ID].toString().trim()] = true;
+      }
+      
+      if (IDX_TIPO_CASO > -1 && row[IDX_TIPO_CASO]) {
+        setTipoCaso[row[IDX_TIPO_CASO].toString().trim()] = true;
+      }
+      
+      if (IDX_CLASIF > -1 && row[IDX_CLASIF]) {
+        setClasif[row[IDX_CLASIF].toString().trim()] = true;
+      }
     }
     
     return { 
@@ -323,6 +345,7 @@ function obtenerCatalogosExplorador() {
     };
     
   } catch (e) {
+    console.error(`[CATÁLOGOS EXPLORADOR - ERROR] Fallo al extraer opciones: ${e.toString()}`);
     return { exito: false, mensaje: e.toString() };
   }
 }

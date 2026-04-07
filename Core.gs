@@ -1,110 +1,97 @@
 /**
- * Módulo Core y Configuración V1.0
+ * Módulo Core y Configuración V2.1 (Conectado a la Mesa y con Variables Globales)
  * Archivo Principal de Configuración y Control de Acceso
  */
 
-var VERSION_APP = 153;
-var SHEET_ID = '1h9zkrvgmH0r-K1wokCVgo3c_aGEKbqBMH03VHL6flDo';
-var SHEET_NAME = 'Respuestas de formulario 2';
-var CATALOG_SHEET_NAME = 'Notas'; 
-var SHEET_EQUIPO_ID = '1JhuWplwWV8k2yj2qI9g0j0niCJlkmnnzH50II1V8aQ0';
-var SHEET_EQUIPO_NAME = 'Datos_Equipo';
-
-var DICCIONARIO_USUARIOS = {
-  "ajmejian@liverpool.com.mx": "AMN",
-  "eurodriguezs@liverpool.com.mx": "GRZ",
-  "hmoralesa@liverpool.com.mx": "HOA",
-  "jmtenorior@liverpool.com.mx": "UTR",
-  "mparedesm@liverpool.com.mx": "MPI",
-  "mhuertasa@liverpool.com.mx": "YHA",
-  "mabalderasv@liverpool.com.mx": "LBR",
-  "nchilpac@liverpool.com.mx": "NPC"
-};
-
-var ADMINS = ["eurodriguezs", "hmoralesa", "mhuertasa"];
-
 /**
  * Verifica si el usuario activo tiene privilegios de administrador.
- * Se llama desde el frontend para mostrar u ocultar la Mesa de Control.
- * @returns {boolean} True si es admin, False si es usuario normal.
  */
 function verificarSiEsAdmin() {
-  var email = Session.getActiveUser().getEmail().toLowerCase();
-  
-  // Extraemos solo la parte antes del @ (ej. hmoralesa)
-  var prefijo = email.split('@')[0];
-  
-  // Revisamos si ese prefijo está en nuestra lista de ADMINS
+  var prefijo = GLOBAL_EMAIL.split('@')[0];
   return ADMINS.indexOf(prefijo) > -1;
 }
 
-var USUARIOS_AUTORIZADOS = Object.keys(DICCIONARIO_USUARIOS);
-
-var TODAS_LAS_COLUMNAS = [
-  "FOLIO", "Marca temporal", "CURP", "Cuenta", "Tipo de Identificación", 
-  "Tipo Cliente", "Tipo Caso", "Servicio", "Tienda", 
-  "Dirección de correo electrónico", "Repetido", "Comentarios Bot"
-];
-
 /**
- * Función de arranque: Carga la interfaz usando plantillas para permitir 
- * la inclusión de archivos CSS y JS separados.
+ * Función de arranque (Punto de entrada de la aplicación)
  */
 function doGet() {
-  var emailUsuario = Session.getActiveUser().getEmail();
-
   try {
-    if (verificarAcceso(emailUsuario)) {
+    if (verificarAcceso(GLOBAL_EMAIL)) {
       var template = HtmlService.createTemplateFromFile('Index');
       return template.evaluate()
-        .setTitle('Sentinel Gestor Fraudes RI-FI')
+        .setTitle(CEREBRO.appTitle) // Lee el Título de tu Mesa de Control
         .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
         .addMetaTag('viewport', 'width=device-width, initial-scale=1');
     } else {
-      return crearPantallaBloqueo(emailUsuario); // Tu función original [1]
+      return crearPantallaBloqueo(GLOBAL_EMAIL);
     }
   } catch (e) {
     console.error("Fallo Crítico doGet: " + e.toString());
-    // Aquí llamamos a la nueva función visual
-    return crearPantallaError(e, emailUsuario);
+    return crearPantallaError(e, GLOBAL_EMAIL);
   }
 }
 
-/** 
- * Función verificación de acceso a la plataforma 
+/** * Función verificación de acceso a la plataforma 
  */
 function verificarAcceso(email) {
-  // 1. Defensa: Si no hay email o no es texto, denegamos acceso sin romper el código
   if (!email || typeof email !== 'string') {
     console.warn("Intento de acceso con email inválido: " + email);
     return false;
   }
-  
-  // 2. Ejecución normal
-  return USUARIOS_AUTORIZADOS.indexOf(email.toLowerCase()) > -1;
+  return USUARIOS_AUTORIZADOS.indexOf(email) > -1; // "email" ya viene en minúsculas desde GLOBAL_EMAIL
 }
 
 /**
- * Función auxiliar para incluir archivos HTML (CSS y JS) en la plantilla principal.
+ * Función auxiliar para incluir archivos HTML (CSS y JS)
  */
 function include(filename) {
   try {
     return HtmlService.createHtmlOutputFromFile(filename).getContent();
   } catch (e) {
-    // Si falla, registramos el error en la consola interna
     console.warn("⚠️ Archivo no encontrado: " + filename);
-    // Devolvemos un comentario HTML inofensivo para que la página siga cargando
     return "<script>console.error('Fallo al cargar componente: " + filename + "');</script>";
   }
 }
 
 /**
- * Convierte un número entero en formato semántico. 
- * Ej: 14 -> "014" -> "v0.1.4" | 100 -> "100" -> "v1.0.0"
+ * Obtiene la versión de la app directamente del Cerebro
  */
 function obtenerVersionFormateada() {
-  // padStart asegura que al menos tenga 3 dígitos (agrega ceros a la izquierda)
-  var numStr = VERSION_APP.toString().padStart(3, '0');
-  // split y join separan cada número y le meten un punto en medio
-  return "v" + numStr.split('').join('.');
+  return VERSION_APP; 
+}
+
+
+/**
+ * Lee la hoja 'Config BOT' (o como se llame en la Mesa) y crea un diccionario global.
+ * Columna B = Llave (Nombre de la variable)
+ * Columna C = Valor
+ */
+function leerConfiguracionBot() {
+  var diccionarioBot = {};
+  try {
+    var ss = SpreadsheetApp.openById(SHEET_ID);
+    
+    // 👇 USAMOS LA VARIABLE GLOBAL DINÁMICA
+    var sheetBot = ss.getSheetByName(BOT_SHEET_NAME); 
+    
+    if (!sheetBot) return diccionarioBot;
+
+    var ultimaFilaBot = sheetBot.getLastRow();
+    if (ultimaFilaBot < 2) return diccionarioBot;
+
+    // Leemos de la fila 2, columna 2 (B) hasta la columna 3 (C)
+    var dataBot = sheetBot.getRange(2, 2, ultimaFilaBot - 1, 2).getValues();
+
+    for (var i = 0; i < dataBot.length; i++) {
+      var nombreVariable = dataBot[i][0] ? dataBot[i][0].toString().trim() : "";
+      var valorVariable = dataBot[i][1];
+      
+      if (nombreVariable !== "") {
+        diccionarioBot[nombreVariable] = valorVariable;
+      }
+    }
+  } catch (e) {
+    console.error("Fallo al leer hoja del Bot (" + BOT_SHEET_NAME + "): " + e.toString());
+  }
+  return diccionarioBot;
 }

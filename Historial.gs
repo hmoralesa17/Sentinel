@@ -1,79 +1,77 @@
 /**
- * Módulo de Historial V1.0
- * Búsqueda rápida en toda la base de datos con ordenamiento seguro.
+ * Módulo de Historial V2.0 (Ultra-Optimizado)
+ * Búsqueda rápida conectada a la Mesa de Control (Variables Globales).
  */
-
 function obtenerHistorialCaso(curp, cuenta) {
+  // 1. VALIDACIÓN TEMPRANA (Early Exit)
+  var sCurp = curp ? curp.toString().trim().toUpperCase() : "";
+  var sCuenta = cuenta ? cuenta.toString().trim().toUpperCase() : "";
+  
+  // Si no hay nada que buscar, abortamos sin tocar Google Sheets
+  if (sCurp === "" && sCuenta === "") return [];
+
   var ss = SpreadsheetApp.openById(SHEET_ID);
   var sheet = ss.getSheetByName(SHEET_NAME);
-  var lastRow = sheet.getLastRow();
-  if (lastRow < 2) return [];
-
-  // getValues es 10x más rápido que getDisplayValues para escanear toda la base
-  var data = sheet.getDataRange().getValues();
-  var headers = data[0];
   
-  var idxCurp = headers.indexOf("CURP"), 
-      idxCuenta = headers.indexOf("Cuenta"), 
-      idxFecha = headers.indexOf("Marca temporal"), 
-      idxAtencion = headers.indexOf("Atención"), 
-      idxFolio = headers.indexOf("FOLIO"), 
-      idxUsr = headers.indexOf("USR"), 
-      idxClasif = headers.indexOf("Clasificación"), 
-      idxIndic = headers.indexOf("Indicaciones");
+  // 2. EL ESCUDO DEL ROBOT (Lectura estricta)
+  var endRow = IDX_FILA_ULTIMOFOLIO > 1 ? IDX_FILA_ULTIMOFOLIO : sheet.getLastRow();
+  if (endRow < 2) return [];
 
+  // Descargamos SOLO los datos reales, saltando los encabezados (Fila 2 en adelante)
+  var data = sheet.getRange(2, 1, endRow - 1, TODAS_LAS_COLUMNAS.length).getValues();
   var historial = [];
-  var sCurp = curp ? curp.toString().trim() : "";
-  var sCuenta = cuenta ? cuenta.toString().trim() : "";
 
-  // Optimización: Empezamos en 1 para saltar los encabezados
-  for (var i = 1; i < data.length; i++) {
+  // 3. BÚSQUEDA VECTORIAL
+  for (var i = 0; i < data.length; i++) {
     var row = data[i];
-    var rCurp = row[idxCurp] ? row[idxCurp].toString().trim() : "";
-    var rCuenta = row[idxCuenta] ? row[idxCuenta].toString().trim() : "";
+    
+    // Extracción directa usando los Índices Globales de tu Mesa de Control
+    var rCurp = (IDX_CURP > -1 && row[IDX_CURP]) ? row[IDX_CURP].toString().trim().toUpperCase() : "";
+    var rCuenta = (IDX_CUENTA > -1 && row[IDX_CUENTA]) ? row[IDX_CUENTA].toString().trim().toUpperCase() : "";
 
-    // Si coincide el CURP o la Cuenta
+    // ¿Hay coincidencia?
     if ((sCurp !== "" && rCurp === sCurp) || (sCuenta !== "" && rCuenta === sCuenta)) {
       
-      // 1. Manejo seguro de la Fecha de Creación
-      var rawFecha = row[idxFecha];
+      // Manejo de la Fecha de Creación
+      var rawFecha = (IDX_MARCA > -1) ? row[IDX_MARCA] : "";
+      var tsOrdenamiento = 0; 
       var strFecha = rawFecha;
-      var tsOrdenamiento = 0; // Timestamp para ordenar
       
       if (rawFecha instanceof Date) {
-        strFecha = Utilities.formatDate(rawFecha, Session.getScriptTimeZone(), "dd/MM/yyyy HH:mm:ss");
+        // Usamos la constante GLOBAL_TIMEZONE para cuadrar con el resto del sistema
+        strFecha = Utilities.formatDate(rawFecha, GLOBAL_TIMEZONE, "dd/MM/yyyy HH:mm:ss");
         tsOrdenamiento = rawFecha.getTime();
       } else if (rawFecha !== "") {
-        // Si no es un objeto fecha, intentamos convertirlo
         tsOrdenamiento = new Date(rawFecha).getTime() || 0;
       }
 
-      // 2. Manejo seguro de la Fecha de Atención
-      var rawAtn = row[idxAtencion];
+      // Manejo de la Fecha de Atención
+      var rawAtn = (IDX_ATENCION > -1) ? row[IDX_ATENCION] : "";
       var strAtencion = "En Proceso";
       
       if (rawAtn instanceof Date) {
-        strAtencion = Utilities.formatDate(rawAtn, Session.getScriptTimeZone(), "dd/MM/yyyy HH:mm:ss");
+        strAtencion = Utilities.formatDate(rawAtn, GLOBAL_TIMEZONE, "dd/MM/yyyy HH:mm:ss");
       } else if (rawAtn !== "") {
         strAtencion = rawAtn.toString();
       }
 
+      // Inyección al Historial
       historial.push({ 
         fecha: strFecha, 
         atencion: strAtencion, 
-        folio: row[idxFolio] ? row[idxFolio].toString() : "S/N", 
-        curp: rCurp,      // <--- NUEVO
-        cuenta: rCuenta,  // <--- NUEVO
-        usr: row[idxUsr] ? row[idxUsr].toString() : "", 
-        clasificacion: row[idxClasif] ? row[idxClasif].toString() : "", 
-        indicaciones: row[idxIndic] ? row[idxIndic].toString() : "",
+        folio: (IDX_FOLIO > -1 && row[IDX_FOLIO]) ? row[IDX_FOLIO].toString() : "S/N", 
+        curp: rCurp,      
+        cuenta: rCuenta,  
+        usr: (IDX_USR > -1 && row[IDX_USR]) ? row[IDX_USR].toString() : "", 
+        clasificacion: (IDX_CLASIF > -1 && row[IDX_CLASIF]) ? row[IDX_CLASIF].toString() : "", 
+        indicaciones: (IDX_INDICACIONES > -1 && row[IDX_INDICACIONES]) ? row[IDX_INDICACIONES].toString() : "",
         _timestamp: tsOrdenamiento 
       });
     }
   }
   
-  // 3. Ordenar matemáticamente usando el timestamp oculto (Descendente: más reciente primero)
-  historial.sort((a, b) => b._timestamp - a._timestamp);
+  // 4. Ordenamiento matemático (Descendente: más reciente primero)
+  historial.sort(function(a, b) { return b._timestamp - a._timestamp; });
   
   return historial;
 }

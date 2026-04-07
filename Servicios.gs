@@ -1,89 +1,80 @@
 /**
- * Módulo de Operaciones V1.3
- * Funciones de escritura, lectura protegida y liberación de casos.
+ * Módulo de Operaciones V2.0
+ * Funciones de escritura, lectura protegida y Motor de Búsqueda
+ * (Totalmente optimizado con Variables Globales)
  */
 
-/**
- * Bloquea un caso para el usuario actual. Optimizada para alta concurrencia.
- */
-function tomarCasoDinamico(numeroFila, esRescate) {
-  var email = Session.getActiveUser().getEmail().toLowerCase();
-  var idUsuario = DICCIONARIO_USUARIOS[email] || email;
+// =======================================================
+// ⚙️ CONFIGURACIÓN INTERNA DEL MÓDULO (Solo para Devs)
+// =======================================================
+var CFG_SERVICIOS = {
+  TIEMPO_ESPERA_CANDADO: 25000, 
   
-  // 1. TRABAJO PESADO AFUERA DEL CANDADO
+  // Diccionario de Mensajes de Error
+  MSG_COLISION: "⚠️ El caso acaba de ser tomado por: ",
+  MSG_TRAFICO_ALTO: "Tráfico alto en el servidor. Cierra esta alerta e intenta guardar o atender de nuevo.",
+  MSG_ERROR_COLUMNA: "Error interno: Faltan columnas clave (USR, FOLIO) en el Diccionario.",
+  MSG_ERROR_LIBERAR: "No se pudo liberar el folio por saturación. Por favor, recarga tu página e intenta de nuevo.",
+  MSG_ERROR_BUSQUEDA: "Error al realizar la búsqueda. Por favor, revisa tus filtros e intenta de nuevo."
+};
+
+// =======================================================
+// 🚀 FUNCIONES OPERATIVAS (Tomar, Liberar, Finalizar)
+// =======================================================
+
+function tomarCasoDinamico(numeroFila, esRescate) {
+  var idUsuario = DICCIONARIO_USUARIOS[GLOBAL_EMAIL] || GLOBAL_EMAIL.split('@')[0];
   var ss = SpreadsheetApp.openById(SHEET_ID);
   var sheet = ss.getSheetByName(SHEET_NAME);
-  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   
-  var colUSRIdx = headers.indexOf("USR") + 1;
-  var colInicioAtnIdx = headers.indexOf("InicioAtencion") + 1;
-  var colFolioIdx = headers.indexOf("FOLIO") + 1;
-  
-  var folio = "Desconocido";
-  if (colFolioIdx > 0) {
-    folio = sheet.getRange(numeroFila, colFolioIdx).getValue().toString().trim();
-  }
+  // Usamos nuestras variables globales (Sumamos 1 porque getRange es Base 1)
+  var folio = IDX_FOLIO > -1 ? sheet.getRange(numeroFila, IDX_FOLIO + 1).getValue().toString().trim() : "S/N";
 
-  console.log(`[INTENTO] Usuario: ${idUsuario} | Folio: ${folio} (Fila: ${numeroFila}) | Rescate: ${esRescate}`);
+  console.log(`[TOMA CASO] Usr: ${idUsuario} | Folio: ${folio} | Fila: ${numeroFila} | Rescate: ${esRescate}`);
 
   var lock = LockService.getScriptLock();
-
   try {
-    lock.waitLock(25000); 
+    lock.waitLock(CFG_SERVICIOS.TIEMPO_ESPERA_CANDADO); 
     
-    // ZONA CRÍTICA: SOLO LECTURA RÁPIDA Y ESCRITURA
-    var usuarioActualEnCelda = sheet.getRange(numeroFila, colUSRIdx).getValue().toString().trim();
+    if (IDX_USR === -1) throw new Error(CFG_SERVICIOS.MSG_ERROR_COLUMNA);
+
+    var celdaUSR = sheet.getRange(numeroFila, IDX_USR + 1);
+    var usuarioActualEnCelda = celdaUSR.getValue().toString().trim();
     
-    // Si ya está tomado y no es rescate, abortar
     if (!esRescate && usuarioActualEnCelda !== "") {
       lock.releaseLock();
-      console.warn(`[COLISIÓN] ${idUsuario} intentó tomar el Folio ${folio}, ya bloqueado por ${usuarioActualEnCelda}`);
-      return { exito: false, mensaje: "⚠️ El caso ya fue tomado por: " + usuarioActualEnCelda };
+      console.warn(`[COLISIÓN] ${idUsuario} rebotado. Folio ${folio} ocupado por ${usuarioActualEnCelda}`);
+      return { exito: false, mensaje: CFG_SERVICIOS.MSG_COLISION + usuarioActualEnCelda };
     }
 
-    // Escribir usuario
-    sheet.getRange(numeroFila, colUSRIdx).setValue(idUsuario);
-    if (colInicioAtnIdx > 0) {
-      sheet.getRange(numeroFila, colInicioAtnIdx).setValue(new Date());
-    }
+    celdaUSR.setValue(idUsuario);
+    if (IDX_INICIO_ATN > -1) sheet.getRange(numeroFila, IDX_INICIO_ATN + 1).setValue(new Date());
     
     SpreadsheetApp.flush();
     lock.releaseLock(); 
     
-    console.log(`[ÉXITO] Folio ${folio} asignado a ${idUsuario}`);
+    console.log(`[ÉXITO] Folio ${folio} bloqueado por ${idUsuario}`);
     return { exito: true };
 
   } catch (e) { 
-    if (lock.hasLock()) lock.releaseLock();
-    console.error(`[ERROR FATAL] Fallo al asignar Folio ${folio}. Detalle: ${e.toString()}`);
-    return { exito: false, mensaje: "Error de servidor (Tráfico Alto). Intenta de nuevo." }; 
+    if (lock.hasLock()) lock.releaseLock(); 
+    console.error(`[ERROR CRÍTICO] Fallo en tomarCasoDinamico. Detalle: ${e.toString()}`);
+    return { exito: false, mensaje: CFG_SERVICIOS.MSG_TRAFICO_ALTO }; 
   }
 }
 
-/**
- * ¡LA NUEVA FUNCIÓN QUE RECUPERAMOS!
- * Libera un caso si el usuario decide cancelar, borrando su nombre y la hora de inicio.
- * Se le agregó LockService para que no choque con otras operaciones.
- */
 function liberarCasoDinamico(numeroFila) {
-  var email = Session.getActiveUser().getEmail().toLowerCase();
-  var idUsuario = DICCIONARIO_USUARIOS[email] || email;
+  var idUsuario = DICCIONARIO_USUARIOS[GLOBAL_EMAIL] || GLOBAL_EMAIL.split('@')[0];
   console.log(`[LIBERAR - INTENTO] ${idUsuario} está cancelando la atención de la fila: ${numeroFila}`);
 
   var lock = LockService.getScriptLock();
-  
   try {
-    lock.waitLock(15000); // 15 segundos de paciencia
+    lock.waitLock(CFG_SERVICIOS.TIEMPO_ESPERA_CANDADO); 
     var ss = SpreadsheetApp.openById(SHEET_ID);
     var sheet = ss.getSheetByName(SHEET_NAME);
-    var headers = sheet.getRange("1:1").getValues()[0];
-    
-    var colUSRIdx = headers.indexOf("USR") + 1;
-    var colInicioAtnIdx = headers.indexOf("InicioAtencion") + 1;
 
-    // Borramos los datos
-    if (colUSRIdx > 0) sheet.getRange(numeroFila, colUSRIdx).clearContent();
-    if (colInicioAtnIdx > 0) sheet.getRange(numeroFila, colInicioAtnIdx).clearContent();
+    if (IDX_USR > -1) sheet.getRange(numeroFila, IDX_USR + 1).clearContent();
+    if (IDX_INICIO_ATN > -1) sheet.getRange(numeroFila, IDX_INICIO_ATN + 1).clearContent();
     
     SpreadsheetApp.flush();
     lock.releaseLock();
@@ -94,138 +85,138 @@ function liberarCasoDinamico(numeroFila) {
   } catch (e) {
     if (lock.hasLock()) lock.releaseLock();
     console.error(`[LIBERAR - ERROR] Fallo al liberar la fila ${numeroFila}: ${e.toString()}`);
-    return { exito: false, mensaje: e.toString() };
+    return { exito: false, mensaje: CFG_SERVICIOS.MSG_ERROR_LIBERAR };
   }
 }
 
-/**
- * Finaliza la atención del caso. 
- * (Mantenemos nuestra versión superoptimizada que lee antes de bloquear)
- */
 function finalizarCasoDinamico(numeroFila, clasificacion, indicaciones) {
-  var email = Session.getActiveUser().getEmail().toLowerCase();
-  var idUsuario = DICCIONARIO_USUARIOS[email] || email;
-  
-  // TRABAJO PESADO AFUERA DEL CANDADO
+  var idUsuario = DICCIONARIO_USUARIOS[GLOBAL_EMAIL] || GLOBAL_EMAIL.split('@')[0];
   var ss = SpreadsheetApp.openById(SHEET_ID);
   var sheet = ss.getSheetByName(SHEET_NAME);
-  var headers = sheet.getRange("1:1").getValues()[0];
   
-  var colFolioIdx = headers.indexOf("FOLIO") + 1;
-  var colClasifIdx = headers.indexOf("Clasificación") + 1;
-  var colIndicIdx = headers.indexOf("Indicaciones") + 1;
-  var colAtnIdx = headers.indexOf("Atención") + 1;
-  
-  var folio = "Desconocido";
-  if (colFolioIdx > 0) {
-    folio = sheet.getRange(numeroFila, colFolioIdx).getValue().toString().trim();
-  }
+  var folio = IDX_FOLIO > -1 ? sheet.getRange(numeroFila, IDX_FOLIO + 1).getValue().toString().trim() : "Desconocido";
 
-  console.log(`[FINALIZAR - INTENTO] ${idUsuario} va a cerrar el Folio: ${folio} con clasificación: ${clasificacion}`);
+  console.log(`[FINALIZAR - INTENTO] ${idUsuario} va a cerrar el Folio: ${folio}`);
 
   var lock = LockService.getScriptLock();
-  
   try {
-    lock.waitLock(25000);
+    lock.waitLock(CFG_SERVICIOS.TIEMPO_ESPERA_CANDADO);
     
-    // ZONA CRÍTICA: SOLO ESCRITURA RÁPIDA
-    if (colClasifIdx > 0) sheet.getRange(numeroFila, colClasifIdx).setValue(clasificacion);
-    if (colIndicIdx > 0) sheet.getRange(numeroFila, colIndicIdx).setValue(indicaciones);
-    if (colAtnIdx > 0) sheet.getRange(numeroFila, colAtnIdx).setValue(new Date()); 
+    if (IDX_CLASIF > -1) sheet.getRange(numeroFila, IDX_CLASIF + 1).setValue(clasificacion);
+    if (IDX_INDICACIONES > -1) sheet.getRange(numeroFila, IDX_INDICACIONES + 1).setValue(indicaciones);
+    if (IDX_ATENCION > -1) sheet.getRange(numeroFila, IDX_ATENCION + 1).setValue(new Date()); 
     
     SpreadsheetApp.flush();
     lock.releaseLock();
     
-    console.log(`[FINALIZAR - ÉXITO] Folio ${folio} cerrado correctamente por ${idUsuario}`);
+    console.log(`[FINALIZAR - ÉXITO] Folio ${folio} cerrado por ${idUsuario}`);
     return { exito: true };
 
   } catch (e) { 
     if (lock.hasLock()) lock.releaseLock(); 
-    console.error(`[FINALIZAR - ERROR] Fallo al cerrar Folio ${folio} (Fila: ${numeroFila}) por ${idUsuario}. Detalle: ${e.toString()}`);
-    return { exito: false, mensaje: "Error de servidor (Tráfico Alto). Intenta guardar de nuevo." }; 
+    console.error(`[FINALIZAR - ERROR] Fallo al cerrar Folio ${folio} (Fila: ${numeroFila}). Detalle: ${e.toString()}`);
+    return { exito: false, mensaje: CFG_SERVICIOS.MSG_TRAFICO_ALTO }; 
   }
 }
 
 
-/**
- * =======================================================
- * MÓDULO EXPLORADOR: MOTOR DE BÚSQUEDA AVANZADA
- * =======================================================
- */
+// =======================================================
+// 🔎 MOTOR DE BÚSQUEDA AVANZADA (Explorador)
+// =======================================================
 function buscarFoliosExplorador(filtros) {
   try {
     var ss = SpreadsheetApp.openById(SHEET_ID);
     var sheet = ss.getSheetByName(SHEET_NAME);
-    var data = sheet.getDataRange().getValues();
-    var headers = data[0];
-
-    // Función rápida para encontrar el número de columna
-    var getIdx = function(name) { return headers.indexOf(name); };
     
-    var idxFolio = getIdx("FOLIO");
-    var idxCurp = getIdx("CURP");
-    var idxCuenta = getIdx("Cuenta");
-    var idxTienda = getIdx("Tienda");
-    var idxCorreo = getIdx("Dirección de correo electrónico");
-    var idxUsr = getIdx("USR");
-    var idxTipoId = getIdx("Tipo de Identificación");
-    var idxTipoCaso = getIdx("Tipo Caso");
-    var idxClasif = getIdx("Clasificación");
-    var idxMarca = getIdx("Marca temporal");
-    var idxInicioAtn = getIdx("InicioAtencion");
-    var idxAtencion = getIdx("Atención");
-    var idxRepetido = getIdx("Repetido");
-    var idxTipoCli = getIdx("Tipo Cliente");
-    var idxServicio = getIdx("Servicio");
-    var idxComentarios = getIdx("Comentarios Bot");
-    var idxIndicaciones = getIdx("Indicaciones");
-
+    // 🛡️ EL ESCUDO DEL ROBOT: Usamos la fila global directamente
+    var ultimaFilaReal = IDX_FILA_ULTIMOFOLIO;
+    
+    // Fallback de seguridad por si falla la lectura del Bot
+    if (ultimaFilaReal < 2) {
+      ultimaFilaReal = sheet.getLastRow(); 
+    }
+    
+    if (ultimaFilaReal < 2) return { exito: true, data: [] };
+    
+    // Descargamos SOLO el rango exacto
+    var data = sheet.getRange(2, 1, ultimaFilaReal - 1, TODAS_LAS_COLUMNAS.length).getValues();
     var resultados = [];
-    // Obtenemos la zona horaria de tu hoja para que las fechas coincidan
-    var zonaHoraria = Session.getScriptTimeZone();
 
-    for (var i = 1; i < data.length; i++) {
+    // --- SANITIZACIÓN PREVIA DE FILTROS ---
+    var fFolio = filtros.folio ? filtros.folio.toString().toUpperCase().replace(/\s+/g, '') : "";
+    var fCurp = filtros.curp ? filtros.curp.toString().toUpperCase().replace(/\s+/g, '') : "";
+    var fCuenta = filtros.cuenta ? filtros.cuenta.toString().toUpperCase().replace(/\s+/g, '') : "";
+    var fUsr = filtros.usr ? filtros.usr.toString().toUpperCase().replace(/\s+/g, '') : "";
+    var fPalabra = filtros.palabraClave ? filtros.palabraClave.toString().toLowerCase() : "";
+
+    for (var i = 0; i < data.length; i++) {
       var row = data[i];
 
-      // 1. REGLA ESTRICTA (100% IDÉNTICOS)
-      if (filtros.folio && row[idxFolio].toString().trim() !== filtros.folio.trim()) continue;
-      if (filtros.curp && row[idxCurp].toString().trim() !== filtros.curp.trim()) continue;
-      if (filtros.cuenta && row[idxCuenta].toString().trim() !== filtros.cuenta.trim()) continue;
+      // 1. REGLA DE FOLIO Y USR (Sanitizados y Parciales)
+      var rFolio = (IDX_FOLIO > -1 && row[IDX_FOLIO]) ? row[IDX_FOLIO].toString().toUpperCase().replace(/\s+/g, '') : "";
+      var rUsr = (IDX_USR > -1 && row[IDX_USR]) ? row[IDX_USR].toString().toUpperCase().replace(/\s+/g, '') : "";
+      
+      if (fFolio && rFolio.indexOf(fFolio) === -1) continue;
+      if (fUsr && rUsr.indexOf(fUsr) === -1) continue;
 
-      // 2. REGLA FLEXIBLE
-      if (filtros.tienda && row[idxTienda].toString().toLowerCase().indexOf(filtros.tienda.toLowerCase()) === -1) continue;
-      if (filtros.usr && row[idxUsr].toString().toLowerCase().indexOf(filtros.usr.toLowerCase()) === -1) continue;
+      // 2. LÓGICA OR PARA CURP / CUENTA (Búsqueda Parcial)
+      if (fCurp !== "" || fCuenta !== "") {
+        var rCurp = (IDX_CURP > -1 && row[IDX_CURP]) ? row[IDX_CURP].toString().toUpperCase().replace(/\s+/g, '') : "";
+        var rCuenta = (IDX_CUENTA > -1 && row[IDX_CUENTA]) ? row[IDX_CUENTA].toString().toUpperCase().replace(/\s+/g, '') : "";
+        
+        var matchO = false;
+        if (fCurp !== "" && rCurp.indexOf(fCurp) > -1) matchO = true;
+        if (fCuenta !== "" && rCuenta.indexOf(fCuenta) > -1) matchO = true;
+        
+        if (!matchO) continue; 
+      }
 
-      // 3. REGLA DE CORREO
+      // 3. REGLA FLEXIBLE (Tienda)
+      if (filtros.tienda) {
+        var rTienda = (IDX_TIENDA > -1 && row[IDX_TIENDA]) ? row[IDX_TIENDA].toString().toLowerCase() : "";
+        if (rTienda.indexOf(filtros.tienda.toLowerCase()) === -1) continue;
+      }
+
+      // 4. REGLA DE CORREO (Alias)
       if (filtros.correo) {
-        var correoCelda = row[idxCorreo] ? row[idxCorreo].toString().toLowerCase() : "";
-        var aliasCelda = correoCelda.split('@')[0];
+        var aliasCelda = (IDX_CORREO > -1 && row[IDX_CORREO]) ? row[IDX_CORREO].toString().toLowerCase().split('@')[0] : "";
         if (aliasCelda.indexOf(filtros.correo.toLowerCase()) === -1) continue;
       }
 
-      // 4. DESPLEGABLES
-      if (filtros.tipoId && row[idxTipoId].toString().trim() !== filtros.tipoId) continue;
-      if (filtros.tipoCaso && row[idxTipoCaso].toString().trim() !== filtros.tipoCaso) continue;
-      if (filtros.clasificacion && row[idxClasif].toString().trim() !== filtros.clasificacion) continue;
+      // 5. DESPLEGABLES MÚLTIPLES (Arrays)
+      if (filtros.tipoId && filtros.tipoId.length > 0) {
+        var rTipoId = (IDX_TIPO_ID > -1 && row[IDX_TIPO_ID]) ? row[IDX_TIPO_ID].toString().trim() : "";
+        if (filtros.tipoId.indexOf(rTipoId) === -1) continue;
+      }
+      if (filtros.tipoCaso && filtros.tipoCaso.length > 0) {
+        var rTipoCaso = (IDX_TIPO_CASO > -1 && row[IDX_TIPO_CASO]) ? row[IDX_TIPO_CASO].toString().trim() : "";
+        if (filtros.tipoCaso.indexOf(rTipoCaso) === -1) continue;
+      }
+      if (filtros.clasificacion && filtros.clasificacion.length > 0) {
+        var rClasif = (IDX_CLASIF > -1 && row[IDX_CLASIF]) ? row[IDX_CLASIF].toString().trim() : "";
+        if (filtros.clasificacion.indexOf(rClasif) === -1) continue;
+      }
 
-      // 5. RANGO DE FECHAS
-      var valMarca = row[idxMarca] ? new Date(row[idxMarca]) : null;
+      // 6. WILDCARD (Palabra Clave en Textos Libres)
+      if (fPalabra !== "") {
+        var rComentarios = (IDX_COMENTARIOS > -1 && row[IDX_COMENTARIOS]) ? row[IDX_COMENTARIOS].toString().toLowerCase() : "";
+        var rIndicaciones = (IDX_INDICACIONES > -1 && row[IDX_INDICACIONES]) ? row[IDX_INDICACIONES].toString().toLowerCase() : "";
+        
+        if (rComentarios.indexOf(fPalabra) === -1 && rIndicaciones.indexOf(fPalabra) === -1) continue; 
+      }
+
+      // 7. RANGO DE FECHAS
+      var valMarca = (IDX_MARCA > -1 && row[IDX_MARCA]) ? new Date(row[IDX_MARCA]) : null;
       if (valMarca && !isNaN(valMarca.getTime())) {
-        if (filtros.fechaInicio) {
-          var fIni = new Date(filtros.fechaInicio + "T00:00:00").getTime();
-          if (valMarca.getTime() < fIni) continue;
-        }
-        if (filtros.fechaFin) {
-          var fFin = new Date(filtros.fechaFin + "T23:59:59").getTime();
-          if (valMarca.getTime() > fFin) continue;
-        }
+        if (filtros.fechaInicio && valMarca.getTime() < new Date(filtros.fechaInicio + "T00:00:00").getTime()) continue;
+        if (filtros.fechaFin && valMarca.getTime() > new Date(filtros.fechaFin + "T23:59:59").getTime()) continue;
       } else if (filtros.fechaInicio || filtros.fechaFin) {
          continue; 
       }
 
-      // 6. TIEMPO DE RESOLUCIÓN
-      var valInicioAtn = row[idxInicioAtn] ? new Date(row[idxInicioAtn]) : null;
-      var valAtencion = row[idxAtencion] ? new Date(row[idxAtencion]) : null;
+      // 8. TIEMPO DE RESOLUCIÓN Y SLA
+      var valInicioAtn = (IDX_INICIO_ATN > -1 && row[IDX_INICIO_ATN]) ? new Date(row[IDX_INICIO_ATN]) : null;
+      var valAtencion = (IDX_ATENCION > -1 && row[IDX_ATENCION]) ? new Date(row[IDX_ATENCION]) : null;
       var minsResolucion = 0;
 
       if (valInicioAtn && valAtencion && !isNaN(valInicioAtn.getTime()) && !isNaN(valAtencion.getTime())) {
@@ -239,45 +230,41 @@ function buscarFoliosExplorador(filtros) {
         if (filtros.resCondicion === 'menor' && minsResolucion >= minFiltro) continue;
       }
 
-      // ✨ CORRECCIÓN: Dar formato limpio a las fechas
-      var txtMarca = (valMarca && !isNaN(valMarca.getTime())) ? Utilities.formatDate(valMarca, zonaHoraria, "dd/MM/yyyy HH:mm:ss") : "-";
-      var txtInicio = (valInicioAtn && !isNaN(valInicioAtn.getTime())) ? Utilities.formatDate(valInicioAtn, zonaHoraria, "dd/MM/yyyy HH:mm:ss") : "-";
-      var txtAtencion = (valAtencion && !isNaN(valAtencion.getTime())) ? Utilities.formatDate(valAtencion, zonaHoraria, "dd/MM/yyyy HH:mm:ss") : "-";
+      // Formateo limpio
+      var txtMarca = (valMarca && !isNaN(valMarca.getTime())) ? Utilities.formatDate(valMarca, GLOBAL_TIMEZONE, "dd/MM/yyyy HH:mm:ss") : "-";
+      var txtInicio = (valInicioAtn && !isNaN(valInicioAtn.getTime())) ? Utilities.formatDate(valInicioAtn, GLOBAL_TIMEZONE, "dd/MM/yyyy HH:mm:ss") : "-";
+      var txtAtencion = (valAtencion && !isNaN(valAtencion.getTime())) ? Utilities.formatDate(valAtencion, GLOBAL_TIMEZONE, "dd/MM/yyyy HH:mm:ss") : "-";
 
-      // SI PASÓ LOS FILTROS, LO GUARDAMOS
+      // Empuje al array de resultados
       resultados.push({
-        fila: i + 1,
-        folio: row[idxFolio] ? row[idxFolio].toString() : "S/N",
-        curp: row[idxCurp] ? row[idxCurp].toString() : "-",
-        cuenta: row[idxCuenta] ? row[idxCuenta].toString() : "-",
-        tienda: row[idxTienda] ? row[idxTienda].toString() : "-",
-        correo: row[idxCorreo] ? row[idxCorreo].toString() : "-",
-        usr: row[idxUsr] ? row[idxUsr].toString() : "-",
-        tipoId: row[idxTipoId] ? row[idxTipoId].toString() : "-",
-        tipoCaso: row[idxTipoCaso] ? row[idxTipoCaso].toString() : "-",
-        clasificacion: row[idxClasif] ? row[idxClasif].toString() : "-",
-        marca: txtMarca,          // Fecha limpia
-        inicioAtn: txtInicio,     // Fecha limpia
-        atencion: txtAtencion,    // Fecha limpia
+        fila: i + 2,
+        folio: (IDX_FOLIO > -1 && row[IDX_FOLIO]) ? row[IDX_FOLIO].toString() : "S/N",
+        curp: (IDX_CURP > -1 && row[IDX_CURP]) ? row[IDX_CURP].toString() : "-",
+        cuenta: (IDX_CUENTA > -1 && row[IDX_CUENTA]) ? row[IDX_CUENTA].toString() : "-",
+        tienda: (IDX_TIENDA > -1 && row[IDX_TIENDA]) ? row[IDX_TIENDA].toString() : "-",
+        correo: (IDX_CORREO > -1 && row[IDX_CORREO]) ? row[IDX_CORREO].toString() : "-",
+        usr: (IDX_USR > -1 && row[IDX_USR]) ? row[IDX_USR].toString() : "-",
+        tipoId: (IDX_TIPO_ID > -1 && row[IDX_TIPO_ID]) ? row[IDX_TIPO_ID].toString() : "-",
+        tipoCaso: (IDX_TIPO_CASO > -1 && row[IDX_TIPO_CASO]) ? row[IDX_TIPO_CASO].toString() : "-",
+        clasificacion: (IDX_CLASIF > -1 && row[IDX_CLASIF]) ? row[IDX_CLASIF].toString() : "-",
+        marca: txtMarca,          
+        inicioAtn: txtInicio,     
+        atencion: txtAtencion,    
         resolucion: minsResolucion > 0 ? minsResolucion.toFixed(2) : "0", 
-        repetido: row[idxRepetido] ? row[idxRepetido].toString() : "-",
-        tipoCli: row[idxTipoCli] ? row[idxTipoCli].toString() : "-",
-        servicio: row[idxServicio] ? row[idxServicio].toString() : "-",
-        comentarios: row[idxComentarios] ? row[idxComentarios].toString() : "-",
-        indicaciones: row[idxIndicaciones] ? row[idxIndicaciones].toString() : "-",
-        _tsMarca: valMarca && !isNaN(valMarca.getTime()) ? valMarca.getTime() : 0  // ✨ Variable oculta para ordenar
+        repetido: (IDX_REPETIDO > -1 && row[IDX_REPETIDO]) ? row[IDX_REPETIDO].toString() : "-",
+        tipoCli: (IDX_TIPO_CLI > -1 && row[IDX_TIPO_CLI]) ? row[IDX_TIPO_CLI].toString() : "-",
+        servicio: (IDX_SERVICIO > -1 && row[IDX_SERVICIO]) ? row[IDX_SERVICIO].toString() : "-",
+        comentarios: (IDX_COMENTARIOS > -1 && row[IDX_COMENTARIOS]) ? row[IDX_COMENTARIOS].toString() : "-",
+        indicaciones: (IDX_INDICACIONES > -1 && row[IDX_INDICACIONES]) ? row[IDX_INDICACIONES].toString() : "-",
+        _tsMarca: valMarca && !isNaN(valMarca.getTime()) ? valMarca.getTime() : 0  
       });
     }
 
-    // ✨ CORRECCIÓN: Ordenar por Marca Temporal (de menor a mayor = más viejo a más reciente)
-    resultados.sort(function(a, b) {
-      return a._tsMarca - b._tsMarca;
-    });
-
-    // Se eliminó el límite de seguridad, mandamos todo.
+    resultados.sort(function(a, b) { return a._tsMarca - b._tsMarca; });
     return { exito: true, data: resultados };
 
   } catch (e) {
-    return { exito: false, mensaje: e.toString() };
+    console.error(`[EXPLORADOR - ERROR] Fallo en la búsqueda: ${e.toString()}`);
+    return { exito: false, mensaje: CFG_SERVICIOS.MSG_ERROR_BUSQUEDA };
   }
 }

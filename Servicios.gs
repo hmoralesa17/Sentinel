@@ -268,3 +268,78 @@ function buscarFoliosExplorador(filtros) {
     return { exito: false, mensaje: CFG_SERVICIOS.MSG_ERROR_BUSQUEDA };
   }
 }
+
+
+/**
+ * Busca los casos en la hoja para llenar la tabla.
+ * (Versión Optimizada para la Fila Fantasma - Cero indexOf)
+ */
+function obtenerCasosDinamicos() {
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var sheet = ss.getSheetByName(SHEET_NAME);
+  
+  // Usamos el límite del Bot o la última fila
+  var lastRow = IDX_FILA_ULTIMOFOLIO > 1 ? IDX_FILA_ULTIMOFOLIO : sheet.getLastRow();
+  if (lastRow < 2) return [];
+
+  // Leemos según la configuración de la Mesa de Control
+  var limite = parseInt(CEREBRO.filas) || 1000;
+  var numRows = Math.min(lastRow - 1, limite);
+  var startRow = lastRow - numRows + 1;
+  
+  // getValues puro para velocidad
+  var data = sheet.getRange(startRow, 1, numRows, TODAS_LAS_COLUMNAS.length).getValues();
+  
+  var ahora = new Date();
+  var limiteLimboMs = (parseFloat(CEREBRO.limbo) || 15) * 60000;
+  var casos = [];
+
+  for (var i = 0; i < data.length; i++) {
+    var row = data[i];
+    
+    var tieneUSR = (IDX_USR > -1 && row[IDX_USR]) ? row[IDX_USR].toString().trim() !== "" : false;
+    var tieneAtencion = (IDX_ATENCION > -1 && row[IDX_ATENCION]) ? row[IDX_ATENCION].toString().trim() !== "" : false;
+    var tieneClasif = (IDX_CLASIF > -1 && row[IDX_CLASIF]) ? row[IDX_CLASIF].toString().trim() !== "" : false;
+    
+    // Filtro del Bot: Asumimos que el Bot debe haber dejado huella para ser operable
+    var tieneBot = (IDX_COMENTARIOS > -1 && row[IDX_COMENTARIOS]) ? row[IDX_COMENTARIOS].toString().trim() !== "" : false;
+
+    // ESTADO: PENDIENTE NORMAL
+    var esCasoPendienteNormal = (!tieneAtencion && !tieneUSR && tieneBot);
+    
+    // ESTADO: LIMBO (Secuestrado)
+    var esLimbo = false;
+    if ((!tieneAtencion || !tieneClasif) && tieneUSR && tieneBot) {
+      var tInic = (IDX_INICIO_ATN > -1 && row[IDX_INICIO_ATN]) ? new Date(row[IDX_INICIO_ATN]) : null;
+      if (tInic && !isNaN(tInic.getTime())) {
+        if ((ahora.getTime() - tInic.getTime()) > limiteLimboMs) {
+          esLimbo = true;
+        }
+      }
+    }
+
+    // SI ES OPERABLE, LO EMPAQUETAMOS
+    if (esCasoPendienteNormal || esLimbo) {
+      var obj = {};
+      // Llenamos el objeto tal como lo espera el render de HTML
+      for (var c = 0; c < TODAS_LAS_COLUMNAS.length; c++) {
+        var nombreColumna = TODAS_LAS_COLUMNAS[c];
+        var val = row[c];
+        
+        // Si es fecha, la formateamos para que se vea bonita en la tabla
+        if (val instanceof Date) {
+          val = Utilities.formatDate(val, GLOBAL_TIMEZONE, "dd/MM/yyyy HH:mm:ss");
+        }
+        obj[nombreColumna] = val !== undefined && val !== null ? val : "";
+      }
+
+      casos.push({ 
+        numeroFila: startRow + i, 
+        datos: obj, 
+        esLimbo: esLimbo, 
+        usuarioOriginal: tieneUSR ? row[IDX_USR].toString().trim() : "" 
+      });
+    }
+  }
+  return casos;
+}

@@ -19,6 +19,8 @@ function leerConfiguracionGeneral() {
     admins:         getSafe('CFG_ADMINS', "eurodriguezs, hmoralesa, mhuertasa"),
     soporte:        getSafe('CFG_SOPORTE', "hmoralesa@liverpool.com.mx"),
     appTitle:       getSafe('CFG_APP_TITLE', "Hub Sentinel Fraudes RI-FI"),
+    sidebarTitle:   getSafe('CFG_SIDEBAR_TITLE', "Sentinel Ops"),
+    maxResultados: getSafe('CFG_MAX_RESULTADOS', "500"),
     appVersion:     getSafe('CFG_APP_VERSION', "v1.5.3 - Estable"),
     mod1Title:      getSafe('CFG_MOD1_TITLE', "Módulo de Atención Folios"),
     mod1Desc:       getSafe('CFG_MOD1_DESC', "Atención de folios biométricos en tienda."),
@@ -43,12 +45,14 @@ function guardarConfiguracionGeneral(datos) {
     SentSec.setSecret('CFG_ADMINS',           clean(datos.admins));
     SentSec.setSecret('CFG_SOPORTE',          clean(datos.soporte));
     SentSec.setSecret('CFG_APP_TITLE',        clean(datos.appTitle));
+    SentSec.setSecret('CFG_SIDEBAR_TITLE',    clean(datos.sidebarTitle));
     SentSec.setSecret('CFG_APP_VERSION',      clean(datos.appVersion));
     SentSec.setSecret('CFG_MOD1_TITLE',       clean(datos.mod1Title));
     SentSec.setSecret('CFG_MOD1_DESC',        clean(datos.mod1Desc));
     SentSec.setSecret('CFG_MOD2_TITLE',       clean(datos.mod2Title));
     SentSec.setSecret('CFG_MOD2_DESC',        clean(datos.mod2Desc));
     SentSec.setSecret('CFG_DICCIONARIO',      datos.diccionario ? datos.diccionario : "[]"); 
+    SentSec.setSecret('CFG_MAX_RESULTADOS', clean(datos.maxResultados));
 
     // 2. BACKUP MÁGICO EN GOOGLE DRIVE
     const folderId = clean(datos.backupFolderId);
